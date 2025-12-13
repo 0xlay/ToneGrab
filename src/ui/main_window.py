@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QComboBox,
@@ -44,6 +44,9 @@ class MainWindow(QMainWindow):
 
         # Download worker
         self.download_worker = None
+        
+        # Progress bar animation
+        self.progress_animation = None
 
         self._setup_ui()
         self._apply_styles()
@@ -109,10 +112,17 @@ class MainWindow(QMainWindow):
 
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(
-            "Paste URL here (e.g., https://www.youtube.com/watch?v=...)"
+            "Paste URL here (e.g., https://www.youtube.com/watch?v=... or playlist URL)"
         )
         self.url_input.setMinimumHeight(40)
+        self.url_input.textChanged.connect(self._on_url_changed)
         main_layout.addWidget(self.url_input)
+        
+        # Playlist info label
+        self.playlist_info_label = QLabel("")
+        self.playlist_info_label.setStyleSheet("font-size: 12px; color: #14a085; margin-top: 5px;")
+        self.playlist_info_label.setVisible(False)
+        main_layout.addWidget(self.playlist_info_label)
 
         # Format and Quality Section
         settings_layout = QHBoxLayout()
@@ -165,6 +175,9 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(output_layout)
 
+        # Buttons Layout (Download and Cancel)
+        buttons_layout = QHBoxLayout()
+        
         # Download Button
         self.download_button = QPushButton("⬇ Download Audio")
         self.download_button.setMinimumHeight(50)
@@ -190,7 +203,39 @@ class MainWindow(QMainWindow):
         """
         )
         self.download_button.clicked.connect(self._start_download)
-        main_layout.addWidget(self.download_button)
+        buttons_layout.addWidget(self.download_button)
+        
+        # Cancel Button
+        self.cancel_button = QPushButton("⏹ Cancel")
+        self.cancel_button.setMinimumHeight(50)
+        self.cancel_button.setMaximumWidth(150)
+        self.cancel_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #c0392b;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #a93226;
+            }
+            QPushButton:pressed {
+                background-color: #922b21;
+            }
+            QPushButton:disabled {
+                background-color: #555;
+                color: #999;
+            }
+        """
+        )
+        self.cancel_button.clicked.connect(self._cancel_download)
+        self.cancel_button.setEnabled(False)  # Disabled by default
+        self.cancel_button.setVisible(False)  # Hidden by default
+        buttons_layout.addWidget(self.cancel_button)
+        
+        main_layout.addLayout(buttons_layout)
 
         # Progress Bar
         self.progress_bar = QProgressBar()
@@ -207,8 +252,12 @@ class MainWindow(QMainWindow):
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setMinimumHeight(200)
+        self.log_text.setMaximumHeight(16777215)  # Allow unlimited expansion
         self.log_text.setPlaceholderText("Download status will appear here...")
         main_layout.addWidget(self.log_text, 1)  # stretch factor = 1 (растягивается)
+        
+        # Add a small spacer at bottom to prevent log from touching window edge
+        main_layout.addStretch(0)  # No stretch, just maintains spacing
 
     def _apply_styles(self):
         """Apply global styles to the window."""
@@ -260,6 +309,15 @@ class MainWindow(QMainWindow):
         """
         )
 
+    def _on_url_changed(self, text: str):
+        """Handle URL input changes to detect playlists."""
+        # Simple check for playlist indicators in URL
+        if text and ('playlist' in text.lower() or 'list=' in text.lower() or '/sets/' in text.lower()):
+            self.playlist_info_label.setText("🎵 Playlist detected! All tracks will be downloaded.")
+            self.playlist_info_label.setVisible(True)
+        else:
+            self.playlist_info_label.setVisible(False)
+    
     def _browse_output_directory(self):
         """Open directory browser for output path selection."""
         directory = QFileDialog.getExistingDirectory(
@@ -303,9 +361,11 @@ class MainWindow(QMainWindow):
         self._log_message(f"📁 Format: {audio_format.upper()}, Quality: {quality} kbps")
         self._log_message(f"💾 Saving to: {output_dir}")
 
-        # Disable download button during download
+        # Update buttons state
         self.download_button.setEnabled(False)
         self.download_button.setText("⏳ Downloading...")
+        self.cancel_button.setEnabled(True)
+        self.cancel_button.setVisible(True)
 
         # Create and start worker thread
         self.download_worker = DownloadWorker(
@@ -320,26 +380,55 @@ class MainWindow(QMainWindow):
         self.download_worker.status.connect(self._log_message)
         self.download_worker.finished.connect(self._download_finished)
         self.download_worker.error.connect(self._download_error)
+        self.download_worker.playlist_item.connect(self._update_playlist_progress)
 
         # Start download
         self.download_worker.start()
+
+    def _update_playlist_progress(self, current: int, total: int, title: str):
+        """Update progress for playlist downloads."""
+        # Update progress bar to show playlist progress
+        playlist_percent = int((current / total) * 100)
+        self.progress_bar.setValue(playlist_percent)
+        
+        # Update button text
+        self.download_button.setText(f"⏳ Downloading {current}/{total}...")
 
     def _log_message(self, message: str):
         """Add a message to the log area."""
         self.log_text.append(message)
 
     def _update_progress(self, value: int):
-        """Update the progress bar."""
-        self.progress_bar.setValue(value)
+        """Update the progress bar with smooth animation."""
+        # Cancel any existing animation
+        if self.progress_animation and self.progress_animation.state() == QPropertyAnimation.State.Running:
+            self.progress_animation.stop()
+        
+        # Don't animate if the change is small or backwards
+        current_value = self.progress_bar.value()
+        if value <= current_value or abs(value - current_value) < 2:
+            self.progress_bar.setValue(value)
+            return
+        
+        # Create smooth animation
+        self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
+        self.progress_animation.setDuration(200)  # 200ms animation
+        self.progress_animation.setStartValue(current_value)
+        self.progress_animation.setEndValue(value)
+        self.progress_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+        self.progress_animation.start()
+
 
     def _download_finished(self, file_path: str):
         """Handle successful download completion."""
         self._log_message(f"🎉 Success! File saved to: {file_path}")
         self._log_message("=" * 60)
 
-        # Re-enable download button
+        # Re-enable download button and hide cancel
         self.download_button.setEnabled(True)
         self.download_button.setText("⬇ Download Audio")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setVisible(False)
 
         # Show success message
         QMessageBox.information(
@@ -353,13 +442,34 @@ class MainWindow(QMainWindow):
         self._log_message(f"❌ Error: {error_message}")
         self._log_message("=" * 60)
 
-        # Re-enable download button
+        # Re-enable download button and hide cancel
         self.download_button.setEnabled(True)
         self.download_button.setText("⬇ Download Audio")
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setVisible(False)
         self.progress_bar.setVisible(False)
 
         # Show error message
         self._show_error(f"Download failed:\n{error_message}")
+
+    def _cancel_download(self):
+        """Cancel the current download."""
+        if self.download_worker and self.download_worker.isRunning():
+            self._log_message("🛑 Cancelling download...")
+            self.download_worker.stop()
+            self.download_worker.wait(3000)  # Wait up to 3 seconds
+            
+            if self.download_worker.isRunning():
+                self.download_worker.terminate()  # Force terminate if needed
+                self._log_message("⚠️ Download force terminated")
+            
+            # Reset UI
+            self.download_button.setEnabled(True)
+            self.download_button.setText("⬇ Download Audio")
+            self.cancel_button.setEnabled(False)
+            self.cancel_button.setVisible(False)
+            self.progress_bar.setVisible(False)
+            self._log_message("❌ Download cancelled by user")
 
     def _show_error(self, message: str):
         """Show error message box."""

@@ -1,0 +1,386 @@
+name: Build ToneGrab
+
+on:
+  push:
+    branches: [ main, develop ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-windows-x64:
+    name: Build Windows (x64)
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Download FFmpeg
+      run: |
+        # Create ffmpeg directory structure
+        New-Item -ItemType Directory -Force -Path ffmpeg/windows/bin
+        
+        # Download FFmpeg x64
+        $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+        Invoke-WebRequest -Uri $ffmpegUrl -OutFile ffmpeg-win.zip
+        
+        # Extract FFmpeg
+        Expand-Archive -Path ffmpeg-win.zip -DestinationPath ffmpeg-temp
+        
+        # Copy binaries
+        $ffmpegDir = Get-ChildItem -Path ffmpeg-temp -Filter "ffmpeg-*" -Directory | Select-Object -First 1
+        Copy-Item "$($ffmpegDir.FullName)/bin/ffmpeg.exe" -Destination ffmpeg/windows/bin/
+        Copy-Item "$($ffmpegDir.FullName)/bin/ffprobe.exe" -Destination ffmpeg/windows/bin/
+        Copy-Item "$($ffmpegDir.FullName)/LICENSE" -Destination ffmpeg/windows/LICENSE.txt
+        
+        # Cleanup
+        Remove-Item -Recurse -Force ffmpeg-temp, ffmpeg-win.zip
+      shell: pwsh
+      
+    - name: Build Windows executable
+      run: python build/build_windows.py
+      
+    - name: Create Windows artifact
+      run: |
+        $version = if ($env:GITHUB_REF -match 'refs/tags/v(.*)') { $matches[1] } else { "dev" }
+        New-Item -ItemType Directory -Force -Path artifacts
+        Compress-Archive -Path dist/ToneGrab.exe -DestinationPath "artifacts/ToneGrab-windows-x64-$version.zip"
+      shell: pwsh
+      
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ToneGrab-windows-x64
+        path: artifacts/*.zip
+        retention-days: 30
+
+  build-windows-arm64:
+    name: Build Windows (ARM64)
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Download FFmpeg
+      run: |
+        # Create ffmpeg directory structure
+        New-Item -ItemType Directory -Force -Path ffmpeg/windows/bin
+        
+        # Download FFmpeg ARM64
+        $ffmpegUrl = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-winarm64-gpl.zip"
+        Invoke-WebRequest -Uri $ffmpegUrl -OutFile ffmpeg-win-arm64.zip
+        
+        # Extract FFmpeg
+        Expand-Archive -Path ffmpeg-win-arm64.zip -DestinationPath ffmpeg-temp
+        
+        # Copy binaries
+        $ffmpegDir = Get-ChildItem -Path ffmpeg-temp -Filter "ffmpeg-*" -Directory | Select-Object -First 1
+        Copy-Item "$($ffmpegDir.FullName)/bin/ffmpeg.exe" -Destination ffmpeg/windows/bin/
+        Copy-Item "$($ffmpegDir.FullName)/bin/ffprobe.exe" -Destination ffmpeg/windows/bin/
+        Copy-Item "$($ffmpegDir.FullName)/LICENSE" -Destination ffmpeg/windows/LICENSE.txt
+        
+        # Cleanup
+        Remove-Item -Recurse -Force ffmpeg-temp, ffmpeg-win-arm64.zip
+      shell: pwsh
+      
+    - name: Build Windows ARM64 executable
+      run: python build/build_windows.py
+      env:
+        PYINSTALLER_TARGET_ARCH: arm64
+      
+    - name: Create Windows ARM64 artifact
+      run: |
+        $version = if ($env:GITHUB_REF -match 'refs/tags/v(.*)') { $matches[1] } else { "dev" }
+        New-Item -ItemType Directory -Force -Path artifacts
+        Compress-Archive -Path dist/ToneGrab.exe -DestinationPath "artifacts/ToneGrab-windows-arm64-$version.zip"
+      shell: pwsh
+      
+    - name: Upload Windows ARM64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ToneGrab-windows-arm64
+        path: artifacts/*.zip
+        retention-days: 30
+
+  build-linux:
+    name: Build Linux (x64)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 \
+          libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+          libxcb-shape0 libdbus-1-3 libgl1-mesa-glx libegl1-mesa
+        
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Download FFmpeg
+      run: |
+        # Create ffmpeg directory structure
+        mkdir -p ffmpeg/linux/bin
+        
+        # Download FFmpeg static build
+        wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-amd64-static.tar.xz
+        
+        # Extract FFmpeg
+        tar -xf ffmpeg-git-amd64-static.tar.xz
+        
+        # Copy binaries
+        FFMPEG_DIR=$(find . -maxdepth 1 -type d -name "ffmpeg-git-*-amd64-static" | head -n 1)
+        cp "$FFMPEG_DIR/ffmpeg" ffmpeg/linux/bin/
+        cp "$FFMPEG_DIR/ffprobe" ffmpeg/linux/bin/
+        cp "$FFMPEG_DIR/GPLv3.txt" ffmpeg/linux/LICENSE.txt
+        
+        # Make executable
+        chmod +x ffmpeg/linux/bin/*
+        
+        # Cleanup
+        rm -rf "$FFMPEG_DIR" ffmpeg-git-amd64-static.tar.xz
+        
+    - name: Build Linux executable
+      run: python build/build_linux.py
+      
+    - name: Create Linux artifact
+      run: |
+        VERSION=$(echo $GITHUB_REF | sed -n 's/refs\/tags\/v\(.*\)/\1/p')
+        VERSION=${VERSION:-dev}
+        mkdir -p artifacts
+        chmod +x dist/ToneGrab
+        cd dist && zip ../artifacts/ToneGrab-linux-x64-$VERSION.zip ToneGrab
+        
+    - name: Upload Linux artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ToneGrab-linux-x64
+        path: artifacts/*.zip
+        retention-days: 30
+
+  build-linux-arm64:
+    name: Build Linux (ARM64)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+      with:
+        platforms: arm64
+        
+    - name: Build in ARM64 container
+      uses: docker://arm64v8/python:3.11-slim
+      with:
+        entrypoint: /bin/bash
+        args: >
+          -c "apt-get update &&
+          apt-get install -y wget xz-utils libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libdbus-1-3 libgl1-mesa-glx libegl1-mesa &&
+          python -m pip install --upgrade pip &&
+          pip install -r requirements.txt &&
+          pip install pyinstaller &&
+          mkdir -p ffmpeg/linux/bin &&
+          wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-arm64-static.tar.xz &&
+          tar -xf ffmpeg-git-arm64-static.tar.xz &&
+          FFMPEG_DIR=\$(find . -maxdepth 1 -type d -name 'ffmpeg-git-*-arm64-static' | head -n 1) &&
+          cp \$FFMPEG_DIR/ffmpeg ffmpeg/linux/bin/ &&
+          cp \$FFMPEG_DIR/ffprobe ffmpeg/linux/bin/ &&
+          cp \$FFMPEG_DIR/GPLv3.txt ffmpeg/linux/LICENSE.txt &&
+          chmod +x ffmpeg/linux/bin/* &&
+          python build/build_linux.py &&
+          VERSION=\$(echo \$GITHUB_REF | sed -n 's/refs\\/tags\\/v\\(.*\\)/\\1/p') &&
+          VERSION=\${VERSION:-dev} &&
+          mkdir -p artifacts &&
+          cd dist && zip ../artifacts/ToneGrab-linux-arm64-\$VERSION.zip ToneGrab"
+          
+    - name: Upload Linux ARM64 artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ToneGrab-linux-arm64
+        path: artifacts/*.zip
+        retention-days: 30
+
+  build-macos-intel:
+    name: Build macOS (Intel x64)
+    runs-on: macos-13  # Intel runner
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Download FFmpeg
+      run: |
+        # Create ffmpeg directory structure
+        mkdir -p ffmpeg/macos/bin
+        
+        # Download FFmpeg for Intel
+        wget https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -O ffmpeg.zip
+        wget https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -O ffprobe.zip
+        
+        # Extract FFmpeg
+        unzip -o ffmpeg.zip -d ffmpeg-temp
+        unzip -o ffprobe.zip -d ffmpeg-temp
+        
+        # Copy binaries
+        cp ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
+        cp ffmpeg-temp/ffprobe ffmpeg/macos/bin/
+        
+        # Make executable
+        chmod +x ffmpeg/macos/bin/*
+        
+        # Create LICENSE file
+        echo "FFmpeg binaries from https://evermeet.cx/ffmpeg/" > ffmpeg/macos/LICENSE.txt
+        
+        # Cleanup
+        rm -rf ffmpeg-temp ffmpeg.zip ffprobe.zip
+        
+    - name: Build macOS application
+      run: python build/build_macos.py
+      
+    - name: Create macOS artifact
+      run: |
+        VERSION=$(echo $GITHUB_REF | sed -n 's/refs\/tags\/v\(.*\)/\1/p')
+        VERSION=${VERSION:-dev}
+        mkdir -p artifacts
+        cd dist && zip -r ../artifacts/ToneGrab-macos-intel-x64-$VERSION.zip ToneGrab.app
+        
+    - name: Upload macOS Intel artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ToneGrab-macos-intel-x64
+        path: artifacts/*.zip
+        retention-days: 30
+
+  build-macos-apple-silicon:
+    name: Build macOS (Apple Silicon ARM64)
+    runs-on: macos-latest  # M1/ARM runner
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Download FFmpeg
+      run: |
+        # Create ffmpeg directory structure
+        mkdir -p ffmpeg/macos/bin
+        
+        # Download FFmpeg for Apple Silicon
+        wget https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -O ffmpeg.zip
+        wget https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -O ffprobe.zip
+        
+        # Extract FFmpeg
+        unzip -o ffmpeg.zip -d ffmpeg-temp
+        unzip -o ffprobe.zip -d ffmpeg-temp
+        
+        # Copy binaries
+        cp ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
+        cp ffmpeg-temp/ffprobe ffmpeg/macos/bin/
+        
+        # Make executable
+        chmod +x ffmpeg/macos/bin/*
+        
+        # Create LICENSE file
+        echo "FFmpeg binaries from https://evermeet.cx/ffmpeg/" > ffmpeg/macos/LICENSE.txt
+        
+        # Cleanup
+        rm -rf ffmpeg-temp ffmpeg.zip ffprobe.zip
+        
+    - name: Build macOS application
+      run: python build/build_macos.py
+      
+    - name: Create macOS artifact
+      run: |
+        VERSION=$(echo $GITHUB_REF | sed -n 's/refs\/tags\/v\(.*\)/\1/p')
+        VERSION=${VERSION:-dev}
+        mkdir -p artifacts
+        cd dist && zip -r ../artifacts/ToneGrab-macos-apple-silicon-arm64-$VERSION.zip ToneGrab.app
+        
+    - name: Upload macOS Apple Silicon artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ToneGrab-macos-apple-silicon-arm64
+        path: artifacts/*.zip
+        retention-days: 30
+
+  create-release:
+    name: Create Release
+    needs: [build-windows-x64, build-windows-arm64, build-linux, build-linux-arm64, build-macos-intel, build-macos-apple-silicon]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/**/*.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

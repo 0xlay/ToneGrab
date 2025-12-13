@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 import pytest
-from core.downloader_refactored import (
+from core.downloader import (
     AudioDownloader,
     AudioFormat,
     DownloadOptions,
@@ -173,7 +173,7 @@ class TestDownloadOptionsBuilder:
 class TestYtDlpDownloadStrategy:
     """Tests for YtDlpDownloadStrategy."""
 
-    @patch("core.downloader_refactored.yt_dlp.YoutubeDL")
+    @patch("core.downloader.yt_dlp.YoutubeDL")
     def test_successful_download(self, mock_ydl_class):
         """Test successful download."""
         # Setup mock
@@ -190,7 +190,7 @@ class TestYtDlpDownloadStrategy:
         assert result == "/tmp/test_video.mp3"
         mock_ydl.extract_info.assert_called_once()
 
-    @patch("core.downloader_refactored.yt_dlp.YoutubeDL")
+    @patch("core.downloader.yt_dlp.YoutubeDL")
     def test_download_failure(self, mock_ydl_class):
         """Test download failure handling."""
         mock_ydl = MagicMock()
@@ -209,7 +209,7 @@ class TestYtDlpDownloadStrategy:
 class TestVideoInfoExtractor:
     """Tests for VideoInfoExtractor."""
 
-    @patch("core.downloader_refactored.yt_dlp.YoutubeDL")
+    @patch("core.downloader.yt_dlp.YoutubeDL")
     def test_successful_info_extraction(self, mock_ydl_class):
         """Test successful video info extraction."""
         mock_ydl = MagicMock()
@@ -227,7 +227,7 @@ class TestVideoInfoExtractor:
         assert info["duration"] == 180
         mock_ydl.extract_info.assert_called_once_with("https://example.com", download=False)
 
-    @patch("core.downloader_refactored.yt_dlp.YoutubeDL")
+    @patch("core.downloader.yt_dlp.YoutubeDL")
     def test_info_extraction_failure(self, mock_ydl_class):
         """Test video info extraction failure."""
         mock_ydl = MagicMock()
@@ -269,7 +269,7 @@ class TestAudioDownloader:
         assert downloader._download_strategy == mock_strategy
         assert downloader._info_extractor == mock_extractor
 
-    @patch("core.downloader_refactored.YtDlpDownloadStrategy.download")
+    @patch("core.downloader.YtDlpDownloadStrategy.download")
     def test_successful_download(self, mock_download, tmp_path):
         """Test successful download through main interface."""
         mock_download.return_value = str(tmp_path / "test_video.mp3")
@@ -285,7 +285,7 @@ class TestAudioDownloader:
         assert result.file_path == str(tmp_path / "test_video.mp3")
         assert result.error_message is None
 
-    @patch("core.downloader_refactored.YtDlpDownloadStrategy.download")
+    @patch("core.downloader.YtDlpDownloadStrategy.download")
     def test_download_failure(self, mock_download, tmp_path):
         """Test download failure handling."""
         mock_download.side_effect = DownloadError("Network error")
@@ -310,7 +310,7 @@ class TestAudioDownloader:
         unknown_fmt = AudioDownloader._create_audio_format("unknown", "192")
         assert unknown_fmt.codec == "mp3"
 
-    @patch("core.downloader_refactored.VideoInfoExtractor.extract_info")
+    @patch("core.downloader.VideoInfoExtractor.extract_info")
     def test_get_video_info(self, mock_extract, tmp_path):
         """Test get video info method."""
         mock_extract.return_value = {
@@ -324,7 +324,7 @@ class TestAudioDownloader:
         assert info["title"] == "Test Video"
         assert info["duration"] == 180
 
-    @patch("core.downloader_refactored.VideoInfoExtractor.extract_info")
+    @patch("core.downloader.VideoInfoExtractor.extract_info")
     def test_get_video_info_failure(self, mock_extract, tmp_path):
         """Test get video info failure handling."""
         mock_extract.side_effect = VideoInfoError("Video not found")

@@ -10,6 +10,7 @@
 - 🎯 **Multi-platform Support** - Download from YouTube, SoundCloud, and many other platforms
 - 🎨 **Modern UI** - Clean and intuitive interface built with PySide6
 - 🎵 **Multiple Formats** - MP3, FLAC, WAV, M4A, OPUS support
+- 📋 **Playlist Support** - Download entire playlists automatically
 - ⚡ **Fast & Efficient** - Powered by yt-dlp and bundled ffmpeg
 - 🖥️ **Cross-platform** - Windows, macOS, and Linux
 - 📦 **Standalone** - No need to install Python or other dependencies (FFmpeg bundled)
@@ -53,10 +54,28 @@ python src/main.py
 
 1. Launch ToneGrab
 2. Paste a URL from YouTube, SoundCloud, or other supported platforms
+   - **Single video/track**: `https://www.youtube.com/watch?v=...`
+   - **Playlist**: `https://www.youtube.com/playlist?list=...`
+   - **SoundCloud set**: `https://soundcloud.com/artist/sets/playlist`
 3. Select audio format (MP3, FLAC, WAV, M4A, OPUS) and quality
 4. Click "Download"
 5. Watch real-time progress with size, speed, and ETA
-6. Find your audio in the output directory
+6. For playlists, all tracks will be downloaded automatically with progress tracking
+7. Find your audio in the output directory
+
+### Playlist Downloads
+
+ToneGrab automatically detects playlist URLs and downloads all tracks:
+- ✅ YouTube playlists
+- ✅ SoundCloud sets/playlists
+- ✅ Bandcamp albums
+- ✅ And more platforms supported by yt-dlp
+
+The application shows:
+- Total number of tracks
+- Current track being downloaded
+- Overall progress
+- Individual track progress
 
 ### Supported Platforms
 
@@ -215,6 +234,50 @@ All platforms use similar PyInstaller-based build scripts:
 - Application assets (icons)
 
 ---
+
+## CI/CD
+
+ToneGrab uses GitHub Actions for automated building across all platforms and architectures:
+
+### Supported Build Targets
+
+| Platform | Architecture | Runner | Artifact Name |
+|----------|-------------|--------|---------------|
+| Windows | x64 | `windows-latest` | `ToneGrab-windows-x64-{version}.zip` |
+| Windows | ARM64 | `windows-latest` | `ToneGrab-windows-arm64-{version}.zip` |
+| Linux | x64 | `ubuntu-latest` | `ToneGrab-linux-x64-{version}.zip` |
+| Linux | ARM64 | `ubuntu-latest` (QEMU) | `ToneGrab-linux-arm64-{version}.zip` |
+| macOS | Intel x64 | `macos-13` | `ToneGrab-macos-intel-x64-{version}.zip` |
+| macOS | Apple Silicon (M1/M2/M3) | `macos-latest` | `ToneGrab-macos-apple-silicon-arm64-{version}.zip` |
+
+### Automated Workflows
+
+**Build Triggers:**
+- Push to `main` or `develop` branches
+- Pull requests to `main`
+- Git tags starting with `v*` (e.g., `v1.0.0`)
+- Manual workflow dispatch
+
+**What happens during build:**
+1. Sets up Python environment
+2. Installs dependencies
+3. Downloads FFmpeg binaries for target platform
+4. Builds standalone executable with PyInstaller
+5. Packages into platform-specific ZIP archive
+6. Uploads artifacts (30-day retention)
+7. Creates GitHub Release (for version tags)
+
+**Creating a Release:**
+```bash
+# Tag your version
+git tag -a v1.0.0 -m "Release version 1.0.0"
+git push origin v1.0.0
+
+# GitHub Actions will automatically:
+# - Build all platform variants
+# - Create a GitHub Release
+# - Attach all ZIP archives to the release
+```
 
 ## Contributing
 
