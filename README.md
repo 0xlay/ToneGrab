@@ -22,11 +22,13 @@
 ### Option 1: Download Binary (Easiest)
 
 Download the latest release for your platform:
-- **Windows**: `ToneGrab.exe`
-- **macOS**: `ToneGrab.app`
-- **Linux**: `ToneGrab`
+- **Windows**: `ToneGrab.exe` (Windows 10/11, x64 or ARM64)
+- **macOS**: `ToneGrab.app` (macOS 11+ Big Sur, Apple Silicon M1/M2/M3/M4)
+- **Linux**: `ToneGrab` (Ubuntu 22.04+, Debian 12+, or compatible distributions with GLIBC 2.35+)
 
 Just download and run - no installation needed!
+
+> **Note for Linux users**: If you're on Ubuntu 20.04 or older, you may need to run from source or upgrade your system.
 
 ### Option 2: Run from Source
 
@@ -241,13 +243,15 @@ ToneGrab uses GitHub Actions for automated building across all platforms and arc
 
 ### Supported Build Targets
 
-| Platform | Architecture | Runner | Artifact Name |
-|----------|-------------|--------|---------------|
-| Windows | x64 | `windows-latest` | `ToneGrab-windows-x64-{version}.zip` |
-| Windows | ARM64 | `windows-latest` | `ToneGrab-windows-arm64-{version}.zip` |
-| Linux | x64 | `ubuntu-latest` | `ToneGrab-linux-x64-{version}.zip` |
-| Linux | ARM64 | `ubuntu-latest` | `ToneGrab-linux-arm64-{version}.zip` |
-| macOS | Apple Silicon (M1/M2/M3/M4) | `macos-latest` | `ToneGrab-macos-apple-silicon-arm64-{version}.zip` |
+| Platform | Architecture | Runner | GLIBC | Artifact Name |
+|----------|-------------|--------|-------|---------------|
+| Windows | x64 | `windows-latest` | N/A | `ToneGrab-windows-x64-{version}.zip` |
+| Windows | ARM64 | `windows-latest` | N/A | `ToneGrab-windows-arm64-{version}.zip` |
+| Linux | x64 | `ubuntu-22.04` | 2.35 | `ToneGrab-linux-x64-{version}.zip` |
+| Linux | ARM64 | `ubuntu-22.04` | 2.35 | `ToneGrab-linux-arm64-{version}.zip` |
+| macOS | Apple Silicon ARM64 | `macos-latest` | N/A | `ToneGrab-macos-apple-silicon-arm64-{version}.zip` |
+
+> **Linux Compatibility**: Binaries are built on Ubuntu 22.04 with GLIBC 2.35, compatible with Ubuntu 22.04+, Debian 12+, Fedora 36+, and similar distributions.
 
 ### Automated Workflows
 
