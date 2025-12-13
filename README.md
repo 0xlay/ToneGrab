@@ -246,9 +246,8 @@ ToneGrab uses GitHub Actions for automated building across all platforms and arc
 | Windows | x64 | `windows-latest` | `ToneGrab-windows-x64-{version}.zip` |
 | Windows | ARM64 | `windows-latest` | `ToneGrab-windows-arm64-{version}.zip` |
 | Linux | x64 | `ubuntu-latest` | `ToneGrab-linux-x64-{version}.zip` |
-| Linux | ARM64 | `ubuntu-latest` (QEMU) | `ToneGrab-linux-arm64-{version}.zip` |
-| macOS | Intel x64 | `macos-13` | `ToneGrab-macos-intel-x64-{version}.zip` |
-| macOS | Apple Silicon (M1/M2/M3) | `macos-latest` | `ToneGrab-macos-apple-silicon-arm64-{version}.zip` |
+| Linux | ARM64 | `ubuntu-latest` | `ToneGrab-linux-arm64-{version}.zip` |
+| macOS | Apple Silicon (M1/M2/M3/M4) | `macos-latest` | `ToneGrab-macos-apple-silicon-arm64-{version}.zip` |
 
 ### Automated Workflows
 

@@ -274,68 +274,6 @@ jobs:
         path: artifacts/*.zip
         retention-days: 30
 
-  build-macos-intel:
-    name: Build macOS (Intel x64)
-    runs-on: macos-13  # Intel runner
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install pyinstaller
-        
-    - name: Download FFmpeg
-      run: |
-        # Create ffmpeg directory structure
-        mkdir -p ffmpeg/macos/bin
-        
-        # Download FFmpeg for Intel
-        wget https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -O ffmpeg.zip
-        wget https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -O ffprobe.zip
-        
-        # Extract FFmpeg
-        unzip -o ffmpeg.zip -d ffmpeg-temp
-        unzip -o ffprobe.zip -d ffmpeg-temp
-        
-        # Copy binaries
-        cp ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
-        cp ffmpeg-temp/ffprobe ffmpeg/macos/bin/
-        
-        # Make executable
-        chmod +x ffmpeg/macos/bin/*
-        
-        # Create LICENSE file
-        echo "FFmpeg binaries from https://evermeet.cx/ffmpeg/" > ffmpeg/macos/LICENSE.txt
-        
-        # Cleanup
-        rm -rf ffmpeg-temp ffmpeg.zip ffprobe.zip
-        
-    - name: Build macOS application
-      run: python build/build_macos.py
-      
-    - name: Create macOS artifact
-      run: |
-        VERSION=$(echo $GITHUB_REF | sed -n 's/refs\/tags\/v\(.*\)/\1/p')
-        VERSION=${VERSION:-dev}
-        mkdir -p artifacts
-        cd dist && zip -r ../artifacts/ToneGrab-macos-intel-x64-$VERSION.zip ToneGrab.app
-        
-    - name: Upload macOS Intel artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: ToneGrab-macos-intel-x64
-        path: artifacts/*.zip
-        retention-days: 30
-
   build-macos-apple-silicon:
     name: Build macOS (Apple Silicon ARM64)
     runs-on: macos-latest  # M1/ARM runner
@@ -400,7 +338,7 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [build-windows-x64, build-windows-arm64, build-linux, build-linux-arm64, build-macos-intel, build-macos-apple-silicon]
+    needs: [build-windows-x64, build-windows-arm64, build-linux, build-linux-arm64, build-macos-apple-silicon]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     
