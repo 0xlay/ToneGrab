@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#1a1a1a"/>
+  <circle cx="256" cy="256" r="230" fill="#2d2d2d"/>
+  
+  <!-- Gradient definitions -->
+  <defs>
+    <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4a9eff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0066cc;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="arrowGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#66ff66;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00cc44;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Sound wave - three curved lines -->
+  <path d="M 150 200 Q 200 150, 250 200 T 350 200" 
+        stroke="url(#waveGradient)" 
+        stroke-width="16" 
+        fill="none" 
+        stroke-linecap="round"/>
+  
+  <path d="M 150 256 Q 200 206, 250 256 T 350 256" 
+        stroke="url(#waveGradient)" 
+        stroke-width="20" 
+        fill="none" 
+        stroke-linecap="round"/>
+  
+  <path d="M 150 312 Q 200 262, 250 312 T 350 312" 
+        stroke="url(#waveGradient)" 
+        stroke-width="16" 
+        fill="none" 
+        stroke-linecap="round"/>
+  
+  <!-- Download arrow -->
+  <g transform="translate(256, 350)">
+    <!-- Arrow shaft -->
+    <rect x="-12" y="-60" width="24" height="80" 
+          fill="url(#arrowGradient)" 
+          rx="4"/>
+    <!-- Arrow head -->
+    <path d="M -40 20 L 0 60 L 40 20 Z" 
+          fill="url(#arrowGradient)"/>
+  </g>
+  
+  <!-- Outer ring accent -->
+  <circle cx="256" cy="256" r="240" 
+          fill="none" 
+          stroke="url(#waveGradient)" 
+          stroke-width="4"
+          opacity="0.5"/>
+</svg>

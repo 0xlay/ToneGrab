@@ -1,0 +1,366 @@
+"""Main window for ToneGrab application."""
+
+from pathlib import Path
+
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+
+from core.config import AppConfig
+from ui.download_worker import DownloadWorker
+from utils.helpers import is_valid_url
+from utils.system import check_ffmpeg, get_resource_path
+
+
+class MainWindow(QMainWindow):
+    """Main application window."""
+
+    def __init__(self):
+        """Initialize the main window."""
+        super().__init__()
+        self.setWindowTitle("ToneGrab - Audio Downloader")
+        self.setMinimumSize(900, 700)
+        
+        # Set window icon
+        icon_path = get_resource_path("assets/icons/icon.ico")
+        if icon_path.exists():
+            self.setWindowIcon(QIcon(str(icon_path)))
+
+        # Load configuration
+        self.config = AppConfig.load()
+
+        # Download worker
+        self.download_worker = None
+
+        self._setup_ui()
+        self._apply_styles()
+        self._check_dependencies()
+
+    def _check_dependencies(self):
+        """Check system dependencies and warn if missing."""
+        ffmpeg_available, ffmpeg_info = check_ffmpeg()
+        
+        if not ffmpeg_available:
+            msg = (
+                "⚠️ FFmpeg not detected!\n\n"
+                "FFmpeg is required to convert audio files.\n"
+                "The app will work for downloading, but conversion may fail.\n\n"
+                "Installation instructions:\n"
+                "• Windows: Download from https://ffmpeg.org/download.html\n"
+                "• macOS: Run 'brew install ffmpeg' in Terminal\n"
+                "• Linux: Run 'sudo apt install ffmpeg'\n\n"
+                "Do you want to continue anyway?"
+            )
+            
+            reply = QMessageBox.warning(
+                self,
+                "FFmpeg Not Found",
+                msg,
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.Yes
+            )
+            
+            if reply == QMessageBox.StandardButton.No:
+                self.close()
+            else:
+                self._log_message("⚠️ Warning: FFmpeg not found. Audio conversion may fail.")
+        else:
+            self._log_message(f"✅ FFmpeg detected: {ffmpeg_info}")
+
+    def _setup_ui(self):
+        """Set up the user interface."""
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(15)
+
+        # Title
+        title_label = QLabel("🎵 ToneGrab")
+        title_label.setStyleSheet(
+            "font-size: 32px; font-weight: bold; color: #14a085; margin-bottom: 10px;"
+        )
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(title_label)
+
+        subtitle_label = QLabel("Download audio from YouTube, SoundCloud, and more")
+        subtitle_label.setStyleSheet("font-size: 14px; color: #888; margin-bottom: 20px;")
+        subtitle_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        main_layout.addWidget(subtitle_label)
+
+        # URL Input Section
+        url_label = QLabel("Video/Audio URL:")
+        url_label.setStyleSheet("font-size: 14px; font-weight: bold;")
+        main_layout.addWidget(url_label)
+
+        self.url_input = QLineEdit()
+        self.url_input.setPlaceholderText(
+            "Paste URL here (e.g., https://www.youtube.com/watch?v=...)"
+        )
+        self.url_input.setMinimumHeight(40)
+        main_layout.addWidget(self.url_input)
+
+        # Format and Quality Section
+        settings_layout = QHBoxLayout()
+
+        # Audio Format
+        format_layout = QVBoxLayout()
+        format_label = QLabel("Audio Format:")
+        format_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+        format_layout.addWidget(format_label)
+
+        self.format_combo = QComboBox()
+        self.format_combo.addItems(["MP3", "FLAC", "WAV", "M4A", "OPUS"])
+        self.format_combo.setCurrentText(self.config.audio_format.upper())
+        self.format_combo.setMinimumHeight(35)
+        format_layout.addWidget(self.format_combo)
+        settings_layout.addLayout(format_layout)
+
+        # Audio Quality
+        quality_layout = QVBoxLayout()
+        quality_label = QLabel("Quality (bitrate):")
+        quality_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+        quality_layout.addWidget(quality_label)
+
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItems(["128 kbps", "192 kbps", "256 kbps", "320 kbps"])
+        self.quality_combo.setCurrentText(f"{self.config.audio_quality} kbps")
+        self.quality_combo.setMinimumHeight(35)
+        quality_layout.addWidget(self.quality_combo)
+        settings_layout.addLayout(quality_layout)
+
+        main_layout.addLayout(settings_layout)
+
+        # Output Directory Section
+        output_layout = QHBoxLayout()
+        output_label = QLabel("Save to:")
+        output_label.setStyleSheet("font-size: 12px; font-weight: bold;")
+        output_layout.addWidget(output_label)
+
+        self.output_path_label = QLineEdit()
+        self.output_path_label.setText(self.config.output_directory)
+        self.output_path_label.setReadOnly(True)
+        self.output_path_label.setMinimumHeight(35)
+        output_layout.addWidget(self.output_path_label)
+
+        self.browse_button = QPushButton("Browse...")
+        self.browse_button.setMinimumHeight(35)
+        self.browse_button.setMaximumWidth(100)
+        self.browse_button.clicked.connect(self._browse_output_directory)
+        output_layout.addWidget(self.browse_button)
+
+        main_layout.addLayout(output_layout)
+
+        # Download Button
+        self.download_button = QPushButton("⬇ Download Audio")
+        self.download_button.setMinimumHeight(50)
+        self.download_button.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #14a085;
+                color: white;
+                font-size: 16px;
+                font-weight: bold;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #0d7377;
+            }
+            QPushButton:pressed {
+                background-color: #0a5f62;
+            }
+            QPushButton:disabled {
+                background-color: #555;
+                color: #999;
+            }
+        """
+        )
+        self.download_button.clicked.connect(self._start_download)
+        main_layout.addWidget(self.download_button)
+
+        # Progress Bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setMinimumHeight(25)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(False)
+        main_layout.addWidget(self.progress_bar)
+
+        # Status/Log Area
+        log_label = QLabel("Download Log:")
+        log_label.setStyleSheet("font-size: 12px; font-weight: bold; margin-top: 10px;")
+        main_layout.addWidget(log_label)
+
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setMinimumHeight(200)
+        self.log_text.setPlaceholderText("Download status will appear here...")
+        main_layout.addWidget(self.log_text, 1)  # stretch factor = 1 (растягивается)
+
+    def _apply_styles(self):
+        """Apply global styles to the window."""
+        self.setStyleSheet(
+            """
+            QMainWindow {
+                background-color: #1e1e1e;
+            }
+            QWidget {
+                background-color: #1e1e1e;
+                color: #e0e0e0;
+            }
+            QLabel {
+                color: #e0e0e0;
+            }
+            QLineEdit, QComboBox, QTextEdit {
+                background-color: #2d2d2d;
+                color: #e0e0e0;
+                border: 2px solid #3d3d3d;
+                border-radius: 5px;
+                padding: 5px;
+            }
+            QLineEdit:focus, QComboBox:focus {
+                border: 2px solid #14a085;
+            }
+            QPushButton {
+                background-color: #3d3d3d;
+                color: #e0e0e0;
+                border: none;
+                border-radius: 5px;
+                padding: 8px;
+            }
+            QPushButton:hover {
+                background-color: #4d4d4d;
+            }
+            QPushButton:pressed {
+                background-color: #2d2d2d;
+            }
+            QProgressBar {
+                border: 2px solid #3d3d3d;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #2d2d2d;
+            }
+            QProgressBar::chunk {
+                background-color: #14a085;
+                border-radius: 3px;
+            }
+        """
+        )
+
+    def _browse_output_directory(self):
+        """Open directory browser for output path selection."""
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select Output Directory", self.config.output_directory
+        )
+        if directory:
+            self.output_path_label.setText(directory)
+            self.config.output_directory = directory
+            self.config.save()
+            self._log_message(f"Output directory changed to: {directory}")
+
+    def _start_download(self):
+        """Start the download process."""
+        url = self.url_input.text().strip()
+
+        # Validation
+        if not url:
+            self._show_error("Please enter a URL")
+            return
+
+        if not is_valid_url(url):
+            self._show_error("Please enter a valid URL (must start with http:// or https://)")
+            return
+
+        # Check if download is already in progress
+        if self.download_worker and self.download_worker.isRunning():
+            self._show_error("Download is already in progress")
+            return
+
+        # Get selected format and quality
+        audio_format = self.format_combo.currentText().lower()
+        quality = self.quality_combo.currentText().split()[0]  # Extract number from "192 kbps"
+        output_dir = self.output_path_label.text()
+
+        # Clear log and reset progress
+        self.log_text.clear()
+        self.progress_bar.setValue(0)
+        self.progress_bar.setVisible(True)
+
+        self._log_message(f"🔍 Preparing to download from: {url}")
+        self._log_message(f"📁 Format: {audio_format.upper()}, Quality: {quality} kbps")
+        self._log_message(f"💾 Saving to: {output_dir}")
+
+        # Disable download button during download
+        self.download_button.setEnabled(False)
+        self.download_button.setText("⏳ Downloading...")
+
+        # Create and start worker thread
+        self.download_worker = DownloadWorker(
+            url=url,
+            output_dir=output_dir,
+            audio_format=audio_format,
+            quality=quality,
+        )
+
+        # Connect signals
+        self.download_worker.progress.connect(self._update_progress)
+        self.download_worker.status.connect(self._log_message)
+        self.download_worker.finished.connect(self._download_finished)
+        self.download_worker.error.connect(self._download_error)
+
+        # Start download
+        self.download_worker.start()
+
+    def _log_message(self, message: str):
+        """Add a message to the log area."""
+        self.log_text.append(message)
+
+    def _update_progress(self, value: int):
+        """Update the progress bar."""
+        self.progress_bar.setValue(value)
+
+    def _download_finished(self, file_path: str):
+        """Handle successful download completion."""
+        self._log_message(f"🎉 Success! File saved to: {file_path}")
+        self._log_message("=" * 60)
+
+        # Re-enable download button
+        self.download_button.setEnabled(True)
+        self.download_button.setText("⬇ Download Audio")
+
+        # Show success message
+        QMessageBox.information(
+            self,
+            "Download Complete",
+            f"Audio downloaded successfully!\n\nSaved to:\n{file_path}",
+        )
+
+    def _download_error(self, error_message: str):
+        """Handle download error."""
+        self._log_message(f"❌ Error: {error_message}")
+        self._log_message("=" * 60)
+
+        # Re-enable download button
+        self.download_button.setEnabled(True)
+        self.download_button.setText("⬇ Download Audio")
+        self.progress_bar.setVisible(False)
+
+        # Show error message
+        self._show_error(f"Download failed:\n{error_message}")
+
+    def _show_error(self, message: str):
+        """Show error message box."""
+        QMessageBox.warning(self, "Error", message)
