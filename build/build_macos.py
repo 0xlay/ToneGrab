@@ -56,17 +56,17 @@ def build_macos():
         
         if ffmpeg_exe.exists():
             args.append(f"--add-binary={ffmpeg_exe}:ffmpeg/macos/bin")
-            print(f"✓ Including ffmpeg from: {ffmpeg_exe}")
+            print(f"[OK] Including ffmpeg from: {ffmpeg_exe}")
         else:
-            print(f"⚠ Warning: ffmpeg not found in {FFMPEG_DIR}")
+            print(f"[WARNING] ffmpeg not found in {FFMPEG_DIR}")
         
         if ffprobe_exe.exists():
             args.append(f"--add-binary={ffprobe_exe}:ffmpeg/macos/bin")
-            print(f"✓ Including ffprobe from: {ffprobe_exe}")
+            print(f"[OK] Including ffprobe from: {ffprobe_exe}")
         else:
-            print(f"⚠ Warning: ffprobe not found in {FFMPEG_DIR}")
+            print(f"[WARNING] ffprobe not found in {FFMPEG_DIR}")
     else:
-        print(f"⚠ Warning: FFmpeg directory not found: {FFMPEG_DIR}")
+        print(f"[WARNING] FFmpeg directory not found: {FFMPEG_DIR}")
 
     # Add icon if exists
     if ICON_PATH.exists():
