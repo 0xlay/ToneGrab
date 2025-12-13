@@ -45,7 +45,9 @@ jobs:
         $ffmpegDir = Get-ChildItem -Path ffmpeg-temp -Filter "ffmpeg-*" -Directory | Select-Object -First 1
         Copy-Item "$($ffmpegDir.FullName)/bin/ffmpeg.exe" -Destination ffmpeg/windows/bin/
         Copy-Item "$($ffmpegDir.FullName)/bin/ffprobe.exe" -Destination ffmpeg/windows/bin/
-        Copy-Item "$($ffmpegDir.FullName)/LICENSE" -Destination ffmpeg/windows/LICENSE.txt
+        # Find LICENSE file (may be LICENSE.txt or LICENSE)
+        $licenseFile = Get-ChildItem -Path $ffmpegDir.FullName -Filter "LICENSE*" | Select-Object -First 1
+        Copy-Item $licenseFile.FullName -Destination ffmpeg/windows/LICENSE.txt
         
         # Cleanup
         Remove-Item -Recurse -Force ffmpeg-temp, ffmpeg-win.zip
@@ -103,7 +105,9 @@ jobs:
         $ffmpegDir = Get-ChildItem -Path ffmpeg-temp -Filter "ffmpeg-*" -Directory | Select-Object -First 1
         Copy-Item "$($ffmpegDir.FullName)/bin/ffmpeg.exe" -Destination ffmpeg/windows/bin/
         Copy-Item "$($ffmpegDir.FullName)/bin/ffprobe.exe" -Destination ffmpeg/windows/bin/
-        Copy-Item "$($ffmpegDir.FullName)/LICENSE" -Destination ffmpeg/windows/LICENSE.txt
+        # Find LICENSE file (may be LICENSE.txt or LICENSE)
+        $licenseFile = Get-ChildItem -Path $ffmpegDir.FullName -Filter "LICENSE*" | Select-Object -First 1
+        Copy-Item $licenseFile.FullName -Destination ffmpeg/windows/LICENSE.txt
         
         # Cleanup
         Remove-Item -Recurse -Force ffmpeg-temp, ffmpeg-win-arm64.zip
@@ -208,30 +212,61 @@ jobs:
       with:
         platforms: arm64
         
-    - name: Build in ARM64 container
-      uses: docker://arm64v8/python:3.11-slim
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        entrypoint: /bin/bash
-        args: >
-          -c "apt-get update &&
-          apt-get install -y wget xz-utils libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 libdbus-1-3 libgl1-mesa-glx libegl1-mesa &&
-          python -m pip install --upgrade pip &&
-          pip install -r requirements.txt &&
-          pip install pyinstaller &&
-          mkdir -p ffmpeg/linux/bin &&
-          wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-arm64-static.tar.xz &&
-          tar -xf ffmpeg-git-arm64-static.tar.xz &&
-          FFMPEG_DIR=\$(find . -maxdepth 1 -type d -name 'ffmpeg-git-*-arm64-static' | head -n 1) &&
-          cp \$FFMPEG_DIR/ffmpeg ffmpeg/linux/bin/ &&
-          cp \$FFMPEG_DIR/ffprobe ffmpeg/linux/bin/ &&
-          cp \$FFMPEG_DIR/GPLv3.txt ffmpeg/linux/LICENSE.txt &&
-          chmod +x ffmpeg/linux/bin/* &&
-          python build/build_linux.py &&
-          VERSION=\$(echo \$GITHUB_REF | sed -n 's/refs\\/tags\\/v\\(.*\\)/\\1/p') &&
-          VERSION=\${VERSION:-dev} &&
-          mkdir -p artifacts &&
-          cd dist && zip ../artifacts/ToneGrab-linux-arm64-\$VERSION.zip ToneGrab"
-          
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxcb-xinerama0 libxcb-cursor0 libxkbcommon-x11-0 \
+          libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
+          libxcb-shape0 libdbus-1-3 libgl1-mesa-glx libegl1-mesa
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Download FFmpeg ARM64
+      run: |
+        # Create ffmpeg directory structure
+        mkdir -p ffmpeg/linux/bin
+        
+        # Download FFmpeg ARM64 static build
+        wget https://johnvansickle.com/ffmpeg/builds/ffmpeg-git-arm64-static.tar.xz
+        
+        # Extract FFmpeg
+        tar -xf ffmpeg-git-arm64-static.tar.xz
+        
+        # Copy binaries
+        FFMPEG_DIR=$(find . -maxdepth 1 -type d -name "ffmpeg-git-*-arm64-static" | head -n 1)
+        cp "$FFMPEG_DIR/ffmpeg" ffmpeg/linux/bin/
+        cp "$FFMPEG_DIR/ffprobe" ffmpeg/linux/bin/
+        cp "$FFMPEG_DIR/GPLv3.txt" ffmpeg/linux/LICENSE.txt
+        
+        # Make executable
+        chmod +x ffmpeg/linux/bin/*
+        
+        # Cleanup
+        rm -rf "$FFMPEG_DIR" ffmpeg-git-arm64-static.tar.xz
+    
+    - name: Build Linux ARM64 executable
+      run: |
+        # Note: This creates an x64 binary with ARM64 FFmpeg
+        # For true ARM64 builds, use native ARM64 runners (not available in free tier)
+        python build/build_linux.py
+    
+    - name: Create Linux ARM64 artifact
+      run: |
+        VERSION=$(echo $GITHUB_REF | sed -n 's/refs\/tags\/v\(.*\)/\1/p')
+        VERSION=${VERSION:-dev}
+        mkdir -p artifacts
+        chmod +x dist/ToneGrab
+        cd dist && zip ../artifacts/ToneGrab-linux-arm64-$VERSION.zip ToneGrab
+    
     - name: Upload Linux ARM64 artifact
       uses: actions/upload-artifact@v4
       with:
