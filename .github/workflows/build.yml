@@ -304,25 +304,35 @@ jobs:
         # Check architecture
         echo "System architecture: $(uname -m)"
         
-        # Install FFmpeg via Homebrew (will get correct architecture)
-        brew install ffmpeg
+        # Download STATIC FFmpeg build for macOS ARM64
+        # Using builds from https://www.gyan.dev/ffmpeg/builds/ or similar
+        # Alternative: Compile static build ourselves
         
-        # Copy binaries to our bundle directory
-        cp $(which ffmpeg) ffmpeg/macos/bin/
-        cp $(which ffprobe) ffmpeg/macos/bin/
+        # Method 1: Try ffmpeg-static npm package (has static binaries)
+        brew install node
+        npm install -g ffmpeg-static ffprobe-static
+        
+        # Find the installed static binaries
+        FFMPEG_STATIC=$(npm root -g)/ffmpeg-static/ffmpeg
+        FFPROBE_STATIC=$(npm root -g)/ffprobe-static/ffprobe
+        
+        # Copy to bundle
+        cp "$FFMPEG_STATIC" ffmpeg/macos/bin/ffmpeg
+        cp "$FFPROBE_STATIC" ffmpeg/macos/bin/ffprobe
         
         # Make executable
         chmod +x ffmpeg/macos/bin/*
         
-        # Verify architecture (should show arm64 on macos-latest)
+        # Verify architecture and check if static
         file ffmpeg/macos/bin/ffmpeg
         file ffmpeg/macos/bin/ffprobe
+        otool -L ffmpeg/macos/bin/ffmpeg
         
         # Test execution
         ffmpeg/macos/bin/ffmpeg -version | head -n 1
         
         # Create LICENSE file
-        echo "FFmpeg installed via Homebrew" > ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg static binaries" > ffmpeg/macos/LICENSE.txt
         echo "FFmpeg is licensed under LGPL 2.1+" >> ffmpeg/macos/LICENSE.txt
         echo "https://ffmpeg.org/legal.html" >> ffmpeg/macos/LICENSE.txt
         

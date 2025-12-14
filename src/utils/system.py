@@ -160,6 +160,15 @@ def check_ffmpeg() -> Tuple[bool, str]:
                     timeout=2,
                 )
                 logger.info(f"check_ffmpeg: File type: {file_result.stdout.strip()}")
+                
+                # Check dynamic library dependencies
+                otool_result = subprocess.run(
+                    ["otool", "-L", ffmpeg_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                logger.info(f"check_ffmpeg: Dynamic libraries:\n{otool_result.stdout}")
             except Exception as file_error:
                 logger.warning(f"check_ffmpeg: Could not check file type: {file_error}")
         
@@ -177,11 +186,23 @@ def check_ffmpeg() -> Tuple[bool, str]:
                     return False, f"FFmpeg found but not executable: {ffmpeg_path}"
 
         # Get version
+        # On macOS, set environment to help with dynamic library loading
+        env = os.environ.copy()
+        if sys.platform == "darwin" and getattr(sys, 'frozen', False):
+            # In frozen app, add _MEIPASS to library search path
+            meipass = sys._MEIPASS
+            env['DYLD_LIBRARY_PATH'] = f"{meipass}:{env.get('DYLD_LIBRARY_PATH', '')}"
+            env['DYLD_FALLBACK_LIBRARY_PATH'] = f"/usr/lib:/usr/local/lib:{meipass}"
+            logger.info(f"check_ffmpeg: Set DYLD_LIBRARY_PATH to include {meipass}")
+        else:
+            env = None
+        
         result = subprocess.run(
             [ffmpeg_path, "-version"],
             capture_output=True,
             text=True,
             timeout=5,
+            env=env,
         )
         
         logger.info(f"check_ffmpeg: returncode={result.returncode}")
