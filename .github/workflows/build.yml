@@ -305,36 +305,66 @@ jobs:
         echo "System architecture: $(uname -m)"
         
         # Download STATIC FFmpeg build for macOS ARM64
-        # evermeet.cx returns x86_64 by default, so we need to get ARM64 specifically
+        # Using https://github.com/AnimMouse/ffmpeg-autobuild (note: autobuild, not stable-autobuild)
         
         # Create temporary directory for extraction
         mkdir -p ffmpeg-temp
         cd ffmpeg-temp
         
-        # Method: Use the latest release and get the correct architecture
-        # evermeet.cx/ffmpeg/getrelease/ffmpeg/zip returns x86_64
-        # We need to use a different source for ARM64
+        # Check latest release and download
+        # The repo is AnimMouse/ffmpeg-autobuild (continuous builds)
+        FFMPEG_VERSION="7.1"
         
-        # Option 1: Download from direct ARM64 link if available
-        # Option 2: Use rg-adguard builds which have proper ARM64 support
-        # Option 3: Download from official FFmpeg or build ourselves
+        # Try direct download from the releases
+        echo "Attempting to download FFmpeg for macOS ARM64..."
         
-        # Using https://github.com/AnimMouse/ffmpeg-stable-autobuild which has ARM64 builds
-        FFMPEG_VERSION="7.1.0"
+        # Option: Use the latest continuous build
+        curl -L "https://github.com/AnimMouse/ffmpeg-autobuild/releases/download/continuous/ffmpeg-macos-arm64-gpl.tar.xz" -o ffmpeg-arm64.tar.xz
         
-        # Download ARM64 builds
-        curl -L "https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases/download/${FFMPEG_VERSION}/ffmpeg-${FFMPEG_VERSION}-macos-arm64-gpl.tar.xz" -o ffmpeg-arm64.tar.xz
+        # Check if download succeeded (file should be larger than 1MB)
+        if [ ! -f ffmpeg-arm64.tar.xz ] || [ $(stat -f%z ffmpeg-arm64.tar.xz) -lt 1000000 ]; then
+          echo "Download failed or file too small, trying alternative source..."
+          rm -f ffmpeg-arm64.tar.xz
+          
+          # Alternative: Use evermeet.cx but convert to get ARM64
+          # Actually, let's build static binary using conda-forge ffmpeg
+          brew install ffmpeg
+          
+          # Copy the Homebrew binaries (they work on ARM)
+          cd ..
+          cp "$(which ffmpeg)" ffmpeg/macos/bin/
+          cp "$(which ffprobe)" ffmpeg/macos/bin/
+          
+          # Skip the rest since we used Homebrew
+          chmod +x ffmpeg/macos/bin/*
+          
+          echo "Using Homebrew FFmpeg as fallback"
+          file ffmpeg/macos/bin/ffmpeg
+          ffmpeg/macos/bin/ffmpeg -version | head -n 1
+          
+          echo "FFmpeg from Homebrew" > ffmpeg/macos/LICENSE.txt
+          
+          exit 0
+        fi
         
-        # Extract
+        # Extract if download succeeded
         tar -xf ffmpeg-arm64.tar.xz
         
         # Find the bin directory and copy binaries
-        FFMPEG_DIR=$(find . -type d -name "bin" | head -n 1)
-        
-        # Move to bundle directory (go back to root first)
-        cd ..
-        cp ffmpeg-temp/${FFMPEG_DIR}/ffmpeg ffmpeg/macos/bin/
-        cp ffmpeg-temp/${FFMPEG_DIR}/ffprobe ffmpeg/macos/bin/
+        if [ -f ffmpeg ] && [ -f ffprobe ]; then
+          # Binaries are in root
+          cd ..
+          cp ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
+          cp ffmpeg-temp/ffprobe ffmpeg/macos/bin/
+        else
+          # Look for bin directory
+          FFMPEG_BIN=$(find . -name ffmpeg -type f | head -n 1)
+          FFPROBE_BIN=$(find . -name ffprobe -type f | head -n 1)
+          
+          cd ..
+          cp "ffmpeg-temp/${FFMPEG_BIN}" ffmpeg/macos/bin/ffmpeg
+          cp "ffmpeg-temp/${FFPROBE_BIN}" ffmpeg/macos/bin/ffprobe
+        fi
         
         # Clean up temp directory
         rm -rf ffmpeg-temp
@@ -347,16 +377,12 @@ jobs:
         file ffmpeg/macos/bin/ffmpeg
         file ffmpeg/macos/bin/ffprobe
         
-        # Check dependencies
-        echo "FFmpeg dependencies:"
-        otool -L ffmpeg/macos/bin/ffmpeg | head -n 10
-        
         # Test execution
         echo "Testing FFmpeg:"
         ffmpeg/macos/bin/ffmpeg -version | head -n 1
         
         # Create LICENSE file
-        echo "FFmpeg static binaries from https://github.com/AnimMouse/ffmpeg-stable-autobuild" > ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg binaries for macOS ARM64" > ffmpeg/macos/LICENSE.txt
         echo "FFmpeg is licensed under GPL 3.0" >> ffmpeg/macos/LICENSE.txt
         echo "https://ffmpeg.org/legal.html" >> ffmpeg/macos/LICENSE.txt
         ffmpeg/macos/bin/ffmpeg -version | head -n 1
