@@ -159,60 +159,27 @@ def check_ffmpeg() -> Tuple[bool, str]:
         ffmpeg_path = find_ffmpeg()
         
         if not ffmpeg_path:
-            logger.error("check_ffmpeg: ffmpeg_path is None")
+            logger.error("FFmpeg not found")
             return False, "FFmpeg not found in PATH or bundled location"
         
-        logger.info(f"check_ffmpeg: Attempting to run: {ffmpeg_path} -version")
+        logger.debug(f"Checking FFmpeg at: {ffmpeg_path}")
         
         # Check if file exists and is executable
         from pathlib import Path
         ffmpeg_file = Path(ffmpeg_path)
         if not ffmpeg_file.exists():
-            logger.error(f"check_ffmpeg: File does not exist: {ffmpeg_path}")
+            logger.error(f"FFmpeg file does not exist: {ffmpeg_path}")
             return False, f"FFmpeg file not found: {ffmpeg_path}"
         
-        # Log file stats
-        try:
-            stat_info = os.stat(ffmpeg_path)
-            logger.info(f"check_ffmpeg: File size: {stat_info.st_size} bytes")
-            logger.info(f"check_ffmpeg: File mode: {oct(stat_info.st_mode)}")
-            logger.info(f"check_ffmpeg: Is executable: {os.access(ffmpeg_path, os.X_OK)}")
-        except Exception as stat_error:
-            logger.warning(f"check_ffmpeg: Could not stat file: {stat_error}")
-        
-        # Check file type on macOS to verify it's the right architecture
-        if sys.platform == "darwin":
-            try:
-                file_result = subprocess.run(
-                    ["file", ffmpeg_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                )
-                logger.info(f"check_ffmpeg: File type: {file_result.stdout.strip()}")
-                
-                # Check dynamic library dependencies
-                otool_result = subprocess.run(
-                    ["otool", "-L", ffmpeg_path],
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                )
-                logger.info(f"check_ffmpeg: Dynamic libraries:\n{otool_result.stdout}")
-            except Exception as file_error:
-                logger.warning(f"check_ffmpeg: Could not check file type: {file_error}")
-        
         if not os.access(ffmpeg_path, os.X_OK):
-            logger.error(f"check_ffmpeg: File not executable: {ffmpeg_path}")
+            logger.warning(f"FFmpeg not executable: {ffmpeg_path}")
             # Try to make it executable on Unix systems
             if sys.platform in ["darwin", "linux"]:
                 try:
                     os.chmod(ffmpeg_path, 0o755)
-                    logger.info(f"check_ffmpeg: Set executable permissions on {ffmpeg_path}")
-                    # Verify chmod worked
-                    logger.info(f"check_ffmpeg: After chmod, is executable: {os.access(ffmpeg_path, os.X_OK)}")
+                    logger.debug(f"Set executable permissions on {ffmpeg_path}")
                 except Exception as chmod_error:
-                    logger.error(f"check_ffmpeg: Failed to chmod: {chmod_error}")
+                    logger.error(f"Failed to set permissions: {chmod_error}")
                     return False, f"FFmpeg found but not executable: {ffmpeg_path}"
 
         # Get version
@@ -223,7 +190,7 @@ def check_ffmpeg() -> Tuple[bool, str]:
             meipass = sys._MEIPASS
             env['DYLD_LIBRARY_PATH'] = f"{meipass}:{env.get('DYLD_LIBRARY_PATH', '')}"
             env['DYLD_FALLBACK_LIBRARY_PATH'] = f"/usr/lib:/usr/local/lib:{meipass}"
-            logger.info(f"check_ffmpeg: Set DYLD_LIBRARY_PATH to include {meipass}")
+            logger.debug(f"Set DYLD_LIBRARY_PATH to include {meipass}")
         else:
             env = None
         
@@ -235,26 +202,20 @@ def check_ffmpeg() -> Tuple[bool, str]:
             env=env,
         )
         
-        logger.info(f"check_ffmpeg: returncode={result.returncode}")
         if result.returncode != 0:
-            logger.error(f"check_ffmpeg: stderr={result.stderr}")
-            logger.error(f"check_ffmpeg: stdout={result.stdout}")
-
-        if result.returncode == 0:
-            # Extract version from first line
-            version_line = result.stdout.split("\n")[0]
-            logger.info(f"check_ffmpeg: Success - {version_line}")
-            return True, version_line
-        else:
+            logger.error(f"FFmpeg execution failed (code {result.returncode}): {result.stderr}")
             return False, f"FFmpeg found but unable to get version (code {result.returncode})"
 
+        # Extract version from first line
+        version_line = result.stdout.split("\n")[0]
+        logger.info(f"FFmpeg ready: {version_line}")
+        return True, version_line
+
     except subprocess.TimeoutExpired:
-        logger.error("check_ffmpeg: Timeout expired")
+        logger.error("FFmpeg check timed out (5 seconds)")
         return False, "FFmpeg check timed out"
     except Exception as e:
-        logger.error(f"check_ffmpeg: Exception - {type(e).__name__}: {str(e)}")
-        import traceback
-        logger.error(f"check_ffmpeg: Traceback:\n{traceback.format_exc()}")
+        logger.error(f"FFmpeg check failed: {type(e).__name__}: {str(e)}")
         return False, f"Error checking FFmpeg: {str(e)}"
 
 

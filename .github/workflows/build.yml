@@ -298,102 +298,107 @@ jobs:
         
     - name: Download FFmpeg
       run: |
+        set -e  # Exit on error
+        
         # Create ffmpeg directory structure
         mkdir -p ffmpeg/macos/bin
         
         # Check architecture
         echo "System architecture: $(uname -m)"
         
-        # Download STATIC FFmpeg build for macOS ARM64
-        # Using https://github.com/AnimMouse/ffmpeg-autobuild (note: autobuild, not stable-autobuild)
+        # We need STATIC FFmpeg binaries (not Homebrew dynamic builds)
+        # Homebrew ffmpeg has @rpath dependencies which won't work in bundled app
         
-        # Create temporary directory for extraction
-        mkdir -p ffmpeg-temp
-        cd ffmpeg-temp
+        echo "Attempting to download static FFmpeg builds..."
         
-        # Check latest release and download
-        # The repo is AnimMouse/ffmpeg-autobuild (continuous builds)
-        FFMPEG_VERSION="7.1"
-        
-        # Try direct download from the releases
-        echo "Attempting to download FFmpeg for macOS ARM64..."
-        
-        # Option: Use the latest continuous build
-        curl -L "https://github.com/AnimMouse/ffmpeg-autobuild/releases/download/continuous/ffmpeg-macos-arm64-gpl.tar.xz" -o ffmpeg-arm64.tar.xz
-        
-        # Check if download succeeded (file should be larger than 1MB)
-        if [ ! -f ffmpeg-arm64.tar.xz ] || [ $(stat -f%z ffmpeg-arm64.tar.xz) -lt 1000000 ]; then
-          echo "Download failed or file too small, trying alternative source..."
-          rm -f ffmpeg-arm64.tar.xz
+        # Try ffmpeg-static npm package first (known to work and be truly static)
+        if npm install --no-save ffmpeg-static ffprobe-static 2>/dev/null; then
+          echo "Successfully installed ffmpeg-static and ffprobe-static"
           
-          # Alternative: Use evermeet.cx but convert to get ARM64
-          # Actually, let's build static binary using conda-forge ffmpeg
-          brew install ffmpeg
+          # Find the binaries
+          FFMPEG_BIN=$(find node_modules/ffmpeg-static -name ffmpeg -type f 2>/dev/null | head -n 1)
+          FFPROBE_BIN=$(find node_modules/ffprobe-static -name ffprobe -type f 2>/dev/null | head -n 1)
           
-          # Copy the Homebrew binaries (they work on ARM)
-          cd ..
-          cp "$(which ffmpeg)" ffmpeg/macos/bin/
-          cp "$(which ffprobe)" ffmpeg/macos/bin/
-          
-          # Skip the rest since we used Homebrew
-          chmod +x ffmpeg/macos/bin/*
-          
-          echo "Using Homebrew FFmpeg as fallback"
-          file ffmpeg/macos/bin/ffmpeg
-          ffmpeg/macos/bin/ffmpeg -version | head -n 1
-          
-          echo "FFmpeg from Homebrew" > ffmpeg/macos/LICENSE.txt
-          
-          exit 0
-        fi
-        
-        # Extract if download succeeded
-        tar -xf ffmpeg-arm64.tar.xz
-        
-        # Find the bin directory and copy binaries
-        if [ -f ffmpeg ] && [ -f ffprobe ]; then
-          # Binaries are in root
-          cd ..
-          cp ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
-          cp ffmpeg-temp/ffprobe ffmpeg/macos/bin/
+          if [ -n "$FFMPEG_BIN" ] && [ -n "$FFPROBE_BIN" ]; then
+            echo "Found binaries:"
+            echo "  ffmpeg: $FFMPEG_BIN"
+            echo "  ffprobe: $FFPROBE_BIN"
+            
+            # Copy to bundle
+            cp "$FFMPEG_BIN" ffmpeg/macos/bin/ffmpeg
+            cp "$FFPROBE_BIN" ffmpeg/macos/bin/ffprobe
+            
+            # Clean up node_modules
+            rm -rf node_modules package-lock.json
+          else
+            echo "ERROR: Could not find binaries in npm packages"
+            exit 1
+          fi
         else
-          # Look for bin directory
-          FFMPEG_BIN=$(find . -name ffmpeg -type f | head -n 1)
-          FFPROBE_BIN=$(find . -name ffprobe -type f | head -n 1)
+          echo "npm install failed, trying direct download from evermeet.cx..."
           
-          cd ..
-          cp "ffmpeg-temp/${FFMPEG_BIN}" ffmpeg/macos/bin/ffmpeg
-          cp "ffmpeg-temp/${FFPROBE_BIN}" ffmpeg/macos/bin/ffprobe
+          # Create temp directory
+          mkdir -p ffmpeg-temp
+          cd ffmpeg-temp
+          
+          # Try evermeet.cx
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/7z" -o ffmpeg.7z
+          curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/7z" -o ffprobe.7z
+          
+          # Extract (try with 7z or fall back to built-in tools)
+          if command -v 7z &> /dev/null; then
+            7z x ffmpeg.7z
+            7z x ffprobe.7z
+          else
+            # If no 7z, try downloading zip instead
+            rm -f ffmpeg.7z ffprobe.7z
+            curl -L "https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip" -o ffmpeg.zip
+            curl -L "https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip" -o ffprobe.zip
+            unzip -o ffmpeg.zip
+            unzip -o ffprobe.zip
+          fi
+          
+          # Check if extracted
+          if [ -f ffmpeg ] && [ -f ffprobe ]; then
+            echo "Successfully extracted FFmpeg from evermeet.cx"
+            cd ..
+            mv ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
+            mv ffmpeg-temp/ffprobe ffmpeg/macos/bin/
+            rm -rf ffmpeg-temp
+          else
+            echo "ERROR: Could not extract FFmpeg"
+            cd ..
+            rm -rf ffmpeg-temp
+            exit 1
+          fi
         fi
-        
-        # Clean up temp directory
-        rm -rf ffmpeg-temp
         
         # Make executable
-        chmod +x ffmpeg/macos/bin/*
+        chmod +x ffmpeg/macos/bin/ffmpeg
+        chmod +x ffmpeg/macos/bin/ffprobe
         
-        # Verify architecture (MUST be arm64)
-        echo "Verifying architecture (should be arm64):"
+        # Verify architecture and dependencies
+        echo ""
+        echo "=== FFmpeg Verification ==="
+        echo "Architecture:"
         file ffmpeg/macos/bin/ffmpeg
         file ffmpeg/macos/bin/ffprobe
         
-        # Test execution
-        echo "Testing FFmpeg:"
-        ffmpeg/macos/bin/ffmpeg -version | head -n 1
+        echo ""
+        echo "Dependencies (first 15 lines):"
+        otool -L ffmpeg/macos/bin/ffmpeg | head -n 15
+        
+        echo ""
+        echo "Testing execution:"
+        ffmpeg/macos/bin/ffmpeg -version 2>&1 | head -n 3
         
         # Create LICENSE file
-        echo "FFmpeg binaries for macOS ARM64" > ffmpeg/macos/LICENSE.txt
-        echo "FFmpeg is licensed under GPL 3.0" >> ffmpeg/macos/LICENSE.txt
-        echo "https://ffmpeg.org/legal.html" >> ffmpeg/macos/LICENSE.txt
-        ffmpeg/macos/bin/ffmpeg -version | head -n 1
-        
-        # Create LICENSE file
-        echo "FFmpeg static binaries from https://evermeet.cx/ffmpeg/" > ffmpeg/macos/LICENSE.txt
-        echo "FFmpeg is licensed under LGPL 2.1+" >> ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg static binaries" > ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg is licensed under LGPL/GPL" >> ffmpeg/macos/LICENSE.txt
         echo "https://ffmpeg.org/legal.html" >> ffmpeg/macos/LICENSE.txt
         
-        # Cleanup
-        rm -rf ffmpeg-temp ffmpeg.zip ffprobe.zip
+        echo ""
+        echo "=== FFmpeg setup complete ==="
         
     - name: Build macOS application
       run: python build/build_macos.py
