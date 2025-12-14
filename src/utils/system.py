@@ -1,11 +1,15 @@
 """System utilities for checking dependencies."""
 
+import logging
 import os
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 from typing import Tuple
+
+# Setup logging for debugging ffmpeg search
+logger = logging.getLogger(__name__)
 
 
 def get_resource_path(relative_path: str) -> Path:
@@ -51,25 +55,27 @@ def get_bundled_ffmpeg_path() -> Path | None:
         # Running as compiled executable
         base_path = Path(sys._MEIPASS)
         
-        # For macOS .app bundle, check multiple possible locations
+        # For macOS .app bundle with --onefile, PyInstaller extracts to temp dir
+        # Check standard bundled location
+        bundled_path = base_path / "ffmpeg" / platform / "bin" / ffmpeg_name
+        
+        if bundled_path.exists() and os.access(bundled_path, os.X_OK):
+            return bundled_path
+        
+        # Fallback: check other possible locations
         if sys.platform == "darwin":
             possible_paths = [
-                base_path / "ffmpeg" / platform / "bin" / ffmpeg_name,
-                base_path / ffmpeg_name,  # If placed at root of bundle
+                base_path / ffmpeg_name,  # Root of temp extraction
                 base_path / ".." / "Resources" / "ffmpeg" / platform / "bin" / ffmpeg_name,
+                base_path / "bin" / ffmpeg_name,
             ]
             
             for path in possible_paths:
-                if path.exists():
-                    return path
+                resolved = path.resolve()
+                if resolved.exists() and os.access(resolved, os.X_OK):
+                    return resolved
             
-            # Debug: print searched paths
-            print(f"DEBUG: Searched for ffmpeg in:")
-            print(f"  sys._MEIPASS: {base_path}")
-            for path in possible_paths:
-                print(f"  - {path} (exists: {path.exists()})")
-            
-            return None
+        return None
     else:
         # Running as script
         base_path = Path(__file__).parent.parent.parent
@@ -93,13 +99,21 @@ def find_ffmpeg() -> str | None:
     # First check bundled version
     bundled = get_bundled_ffmpeg_path()
     if bundled:
+        logger.info(f"Found bundled ffmpeg at: {bundled}")
         return str(bundled)
+    else:
+        logger.warning("Bundled ffmpeg not found")
+        if getattr(sys, "frozen", False):
+            logger.debug(f"sys._MEIPASS: {sys._MEIPASS}")
+            logger.debug(f"sys.executable: {sys.executable}")
 
     # Then check system PATH
     system_ffmpeg = shutil.which("ffmpeg")
     if system_ffmpeg:
+        logger.info(f"Found system ffmpeg at: {system_ffmpeg}")
         return system_ffmpeg
-
+    
+    logger.error("ffmpeg not found in bundled location or system PATH")
     return None
 
 

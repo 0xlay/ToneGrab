@@ -30,7 +30,7 @@ def build_macos():
     args = [
         MAIN_SCRIPT,
         f"--name={APP_NAME}",
-        # --onefile not compatible with --target-arch=universal2
+        "--onefile",  # Single executable (smaller size)
         "--windowed",  # .app bundle
         f"--distpath={DIST_DIR}",
         f"--workpath={BUILD_DIR / 'temp'}",
@@ -45,8 +45,8 @@ def build_macos():
         # Collect data files
         f"--add-data={SRC_DIR}:src",
         f"--add-data={ASSETS_DIR}:assets",
-        # macOS specific
-        "--target-arch=universal2",  # Universal binary for Intel and Apple Silicon
+        # macOS specific - use arm64 only (Apple Silicon)
+        "--target-arch=arm64",  # Apple Silicon only for smaller size
     ]
 
     # Add ffmpeg binaries if they exist

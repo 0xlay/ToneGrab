@@ -324,23 +324,6 @@ jobs:
         
     - name: Build macOS application
       run: python build/build_macos.py
-    
-    - name: Fix ffmpeg permissions in .app bundle
-      run: |
-        # Ensure ffmpeg binaries inside the .app have execute permissions
-        if [ -f "dist/ToneGrab.app/Contents/MacOS/ffmpeg/macos/bin/ffmpeg" ]; then
-          chmod +x dist/ToneGrab.app/Contents/MacOS/ffmpeg/macos/bin/ffmpeg
-          echo "[OK] Set execute permission on bundled ffmpeg"
-        fi
-        if [ -f "dist/ToneGrab.app/Contents/MacOS/ffmpeg/macos/bin/ffprobe" ]; then
-          chmod +x dist/ToneGrab.app/Contents/MacOS/ffmpeg/macos/bin/ffprobe
-          echo "[OK] Set execute permission on bundled ffprobe"
-        fi
-        
-        # Debug: show .app structure
-        echo "ToneGrab.app structure:"
-        ls -la dist/ToneGrab.app/Contents/MacOS/ || true
-        ls -la dist/ToneGrab.app/Contents/MacOS/ffmpeg/macos/bin/ || true
       
     - name: Create macOS artifact
       run: |

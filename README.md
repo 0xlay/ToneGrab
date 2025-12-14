@@ -226,7 +226,7 @@ All platforms use similar PyInstaller-based build scripts:
 |----------|--------|--------|------|-------|
 | Windows | `build/build_windows.py` | `ToneGrab.exe` | ~185 MB | Includes .ico icon |
 | Linux | `build/build_linux.py` | `ToneGrab` | ~180-200 MB | Can create AppImage |
-| macOS | `build/build_macos.py` | `ToneGrab.app` | ~200-220 MB | Universal2 (Intel + ARM) |
+| macOS | `build/build_macos.py` | `ToneGrab.app` | ~180-200 MB | Apple Silicon ARM64 only |
 
 **All builds include:**
 - Python runtime
