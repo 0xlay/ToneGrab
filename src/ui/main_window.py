@@ -3,11 +3,12 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QComboBox,
     QFileDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QScrollArea,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -32,6 +34,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         """Initialize the main window."""
         super().__init__()
+        
         self.setWindowTitle("ToneGrab - Audio Downloader")
         self.setMinimumSize(900, 700)
         
@@ -43,11 +46,9 @@ class MainWindow(QMainWindow):
         # Load configuration
         self.config = AppConfig.load()
 
-        # Download worker
-        self.download_worker = None
-        
-        # Progress bar animation
-        self.progress_animation = None
+        # Download workers list (support multiple simultaneous downloads)
+        self.download_workers = []
+        self.download_id_counter = 0
 
         self._setup_ui()
         self._apply_styles()
@@ -55,9 +56,6 @@ class MainWindow(QMainWindow):
 
     def _check_dependencies(self):
         """Check system dependencies and warn if missing."""
-        import logging
-        from pathlib import Path
-        
         ffmpeg_available, ffmpeg_info = check_ffmpeg()
         
         if not ffmpeg_available:
@@ -102,6 +100,9 @@ class MainWindow(QMainWindow):
 
     def _setup_ui(self):
         """Set up the user interface."""
+        # Disable updates during UI construction for faster initialization
+        self.setUpdatesEnabled(False)
+        
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
@@ -192,11 +193,8 @@ class MainWindow(QMainWindow):
 
         main_layout.addLayout(output_layout)
 
-        # Buttons Layout (Download and Cancel)
-        buttons_layout = QHBoxLayout()
-        
         # Download Button
-        self.download_button = QPushButton("⬇ Download Audio")
+        self.download_button = QPushButton("⬇ Add to Queue")
         self.download_button.setMinimumHeight(50)
         self.download_button.setStyleSheet(
             """
@@ -220,46 +218,25 @@ class MainWindow(QMainWindow):
         """
         )
         self.download_button.clicked.connect(self._start_download)
-        buttons_layout.addWidget(self.download_button)
-        
-        # Cancel Button
-        self.cancel_button = QPushButton("⏹ Cancel")
-        self.cancel_button.setMinimumHeight(50)
-        self.cancel_button.setMaximumWidth(150)
-        self.cancel_button.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #c0392b;
-                color: white;
-                font-size: 16px;
-                font-weight: bold;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #a93226;
-            }
-            QPushButton:pressed {
-                background-color: #922b21;
-            }
-            QPushButton:disabled {
-                background-color: #555;
-                color: #999;
-            }
-        """
-        )
-        self.cancel_button.clicked.connect(self._cancel_download)
-        self.cancel_button.setEnabled(False)  # Disabled by default
-        self.cancel_button.setVisible(False)  # Hidden by default
-        buttons_layout.addWidget(self.cancel_button)
-        
-        main_layout.addLayout(buttons_layout)
+        main_layout.addWidget(self.download_button)
 
-        # Progress Bar
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMinimumHeight(25)
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(False)
-        main_layout.addWidget(self.progress_bar)
+        # Active Downloads Section
+        downloads_label = QLabel("Active Downloads:")
+        downloads_label.setStyleSheet("font-size: 14px; font-weight: bold; margin-top: 10px;")
+        main_layout.addWidget(downloads_label)
+        
+        # Scrollable container for download items
+        self.downloads_scroll = QScrollArea()
+        self.downloads_scroll.setWidgetResizable(True)
+        self.downloads_scroll.setMaximumHeight(300)
+        self.downloads_scroll.setMinimumHeight(150)
+        
+        self.downloads_container = QWidget()
+        self.downloads_layout = QVBoxLayout(self.downloads_container)
+        self.downloads_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.downloads_layout.setSpacing(5)
+        self.downloads_scroll.setWidget(self.downloads_container)
+        main_layout.addWidget(self.downloads_scroll)
 
         # Status/Log Area
         log_label = QLabel("Download Log:")
@@ -268,13 +245,16 @@ class MainWindow(QMainWindow):
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
-        self.log_text.setMinimumHeight(200)
+        self.log_text.setMinimumHeight(120)
         self.log_text.setMaximumHeight(16777215)  # Allow unlimited expansion
         self.log_text.setPlaceholderText("Download status will appear here...")
         main_layout.addWidget(self.log_text, 1)  # stretch factor = 1 (растягивается)
         
         # Add a small spacer at bottom to prevent log from touching window edge
         main_layout.addStretch(0)  # No stretch, just maintains spacing
+        
+        # Re-enable updates after UI is fully constructed
+        self.setUpdatesEnabled(True)
 
     def _apply_styles(self):
         """Apply global styles to the window."""
@@ -347,7 +327,7 @@ class MainWindow(QMainWindow):
             self._log_message(f"Output directory changed to: {directory}")
 
     def _start_download(self):
-        """Start the download process."""
+        """Add download to queue and start it."""
         url = self.url_input.text().strip()
 
         # Validation
@@ -359,134 +339,237 @@ class MainWindow(QMainWindow):
             self._show_error("Please enter a valid URL (must start with http:// or https://)")
             return
 
-        # Check if download is already in progress
-        if self.download_worker and self.download_worker.isRunning():
-            self._show_error("Download is already in progress")
-            return
-
         # Get selected format and quality
         audio_format = self.format_combo.currentText().lower()
         quality = self.quality_combo.currentText().split()[0]  # Extract number from "192 kbps"
         output_dir = self.output_path_label.text()
+        
+        # Generate unique download ID
+        download_id = self.download_id_counter
+        self.download_id_counter += 1
 
-        # Clear log and reset progress
-        self.log_text.clear()
-        self.progress_bar.setValue(0)
-        self.progress_bar.setVisible(True)
-
-        self._log_message(f"🔍 Preparing to download from: {url}")
+        self._log_message(f"📥 Added to queue #{download_id + 1}: {url}")
         self._log_message(f"📁 Format: {audio_format.upper()}, Quality: {quality} kbps")
-        self._log_message(f"💾 Saving to: {output_dir}")
 
-        # Update buttons state
-        self.download_button.setEnabled(False)
-        self.download_button.setText("⏳ Downloading...")
-        self.cancel_button.setEnabled(True)
-        self.cancel_button.setVisible(True)
+        # Create download item widget
+        download_widget = self._create_download_widget(download_id, url, audio_format, quality)
+        self.downloads_layout.addWidget(download_widget)
 
         # Create and start worker thread
-        self.download_worker = DownloadWorker(
+        worker = DownloadWorker(
             url=url,
             output_dir=output_dir,
             audio_format=audio_format,
             quality=quality,
         )
+        
+        # Store worker with its ID and widget
+        worker_data = {
+            'id': download_id,
+            'worker': worker,
+            'widget': download_widget,
+            'url': url
+        }
+        self.download_workers.append(worker_data)
 
-        # Connect signals
-        self.download_worker.progress.connect(self._update_progress)
-        self.download_worker.status.connect(self._log_message)
-        self.download_worker.finished.connect(self._download_finished)
-        self.download_worker.error.connect(self._download_error)
-        self.download_worker.playlist_item.connect(self._update_playlist_progress)
+        # Connect signals with download ID
+        worker.progress.connect(lambda p, d, wd=worker_data: self._update_download_progress(wd, p, d))
+        worker.status.connect(self._log_message)
+        worker.finished.connect(lambda fp, wd=worker_data: self._download_finished(wd, fp))
+        worker.error.connect(lambda msg, wd=worker_data: self._download_error(wd, msg))
+        worker.playlist_item.connect(lambda c, t, title, wd=worker_data: self._update_playlist_progress(wd, c, t, title))
 
         # Start download
-        self.download_worker.start()
-
-    def _update_playlist_progress(self, current: int, total: int, title: str):
-        """Update progress for playlist downloads."""
-        # Update progress bar to show playlist progress
-        playlist_percent = int((current / total) * 100)
-        self.progress_bar.setValue(playlist_percent)
+        worker.start()
         
-        # Update button text
-        self.download_button.setText(f"⏳ Downloading {current}/{total}...")
+        # Clear URL input for next download
+        self.url_input.clear()
+
+    def _create_download_widget(self, download_id: int, url: str, audio_format: str, quality: str) -> QWidget:
+        """Create a widget for displaying download progress."""
+        container = QFrame()
+        container.setObjectName(f"download_{download_id}")
+        container.setFrameStyle(QFrame.Shape.StyledPanel | QFrame.Shadow.Raised)
+        container.setStyleSheet("""
+            QFrame {
+                background-color: #2d2d2d;
+                border: 1px solid #3d3d3d;
+                border-radius: 5px;
+                padding: 10px;
+            }
+        """)
+        
+        layout = QVBoxLayout(container)
+        layout.setSpacing(5)
+        
+        # Title and URL
+        title_label = QLabel(f"#{download_id + 1}: {url[:60]}...")
+        title_label.setStyleSheet("font-weight: bold; color: #14a085;")
+        layout.addWidget(title_label)
+        
+        # Format and quality info
+        info_label = QLabel(f"Format: {audio_format.upper()} | Quality: {quality} kbps")
+        info_label.setStyleSheet("font-size: 11px; color: #888;")
+        layout.addWidget(info_label)
+        
+        # Progress bar
+        progress_bar = QProgressBar()
+        progress_bar.setObjectName(f"progress_{download_id}")
+        progress_bar.setMaximum(100)
+        progress_bar.setValue(0)
+        progress_bar.setTextVisible(True)
+        progress_bar.setFormat("%p% - Initializing...")
+        layout.addWidget(progress_bar)
+        
+        # Buttons row
+        buttons_layout = QHBoxLayout()
+        
+        # Status label
+        status_label = QLabel("⏳ Starting...")
+        status_label.setObjectName(f"status_{download_id}")
+        status_label.setStyleSheet("color: #e0e0e0;")
+        buttons_layout.addWidget(status_label)
+        
+        buttons_layout.addStretch()
+        
+        # Cancel button
+        cancel_btn = QPushButton("❌ Cancel")
+        cancel_btn.setObjectName(f"cancel_{download_id}")
+        cancel_btn.setMaximumWidth(80)
+        cancel_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #c0392b;
+                color: white;
+                font-size: 11px;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #a93226;
+            }
+        """)
+        cancel_btn.clicked.connect(lambda: self._cancel_download(download_id))
+        buttons_layout.addWidget(cancel_btn)
+        
+        layout.addLayout(buttons_layout)
+        
+        return container
+
+    def _update_download_progress(self, worker_data: dict, progress: int, description: str):
+        """Update progress for a specific download."""
+        download_id = worker_data['id']
+        widget = worker_data['widget']
+        
+        # Update progress bar
+        progress_bar = widget.findChild(QProgressBar, f"progress_{download_id}")
+        if progress_bar:
+            progress_bar.setValue(progress)
+            progress_bar.setFormat(f"%p% - {description}")
+        
+        # Update status label
+        status_label = widget.findChild(QLabel, f"status_{download_id}")
+        if status_label:
+            if progress >= 100:
+                status_label.setText("✅ Completed")
+                status_label.setStyleSheet("color: #14a085;")
+            else:
+                status_label.setText(f"⏳ {description}")
+
+    def _update_playlist_progress(self, worker_data: dict, current: int, total: int, title: str):
+        """Update progress for playlist downloads."""
+        download_id = worker_data['id']
+        status_label = worker_data['widget'].findChild(QLabel, f"status_{download_id}")
+        if status_label:
+            status_label.setText(f"📼 Playlist: {current}/{total}")
 
     def _log_message(self, message: str):
         """Add a message to the log area."""
         self.log_text.append(message)
 
-    def _update_progress(self, value: int):
-        """Update the progress bar with smooth animation."""
-        # Cancel any existing animation
-        if self.progress_animation and self.progress_animation.state() == QPropertyAnimation.State.Running:
-            self.progress_animation.stop()
+    def _download_finished(self, worker_data: dict, file_path: str = ""):
+        """Handle successful download completion."""
+        download_id = worker_data['id']
+        widget = worker_data['widget']
         
-        # Don't animate if the change is small or backwards
-        current_value = self.progress_bar.value()
-        if value <= current_value or abs(value - current_value) < 2:
-            self.progress_bar.setValue(value)
+        self._log_message(f"🎉 Download #{download_id + 1} completed!")
+        if file_path:
+            self._log_message(f"📁 Saved to: {file_path}")
+        
+        # Update widget status
+        status_label = widget.findChild(QLabel, f"status_{download_id}")
+        if status_label:
+            status_label.setText("✅ Completed")
+            status_label.setStyleSheet("color: #14a085; font-weight: bold;")
+        
+        # Hide cancel button
+        cancel_btn = widget.findChild(QPushButton, f"cancel_{download_id}")
+        if cancel_btn:
+            cancel_btn.setVisible(False)
+        
+        # Remove from active workers list
+        self.download_workers = [w for w in self.download_workers if w['id'] != download_id]
+
+    def _download_error(self, worker_data: dict, error_message: str):
+        """Handle download error."""
+        download_id = worker_data['id']
+        widget = worker_data['widget']
+        
+        self._log_message(f"❌ Download #{download_id + 1} failed: {error_message}")
+        
+        # Update widget status
+        status_label = widget.findChild(QLabel, f"status_{download_id}")
+        if status_label:
+            status_label.setText("❌ Failed")
+            status_label.setStyleSheet("color: #c0392b; font-weight: bold;")
+        
+        # Update progress bar
+        progress_bar = widget.findChild(QProgressBar, f"progress_{download_id}")
+        if progress_bar:
+            progress_bar.setFormat("Failed!")
+        
+        # Hide cancel button
+        cancel_btn = widget.findChild(QPushButton, f"cancel_{download_id}")
+        if cancel_btn:
+            cancel_btn.setVisible(False)
+        
+        # Remove from active workers list
+        self.download_workers = [w for w in self.download_workers if w['id'] != download_id]
+
+    def _cancel_download(self, download_id: int):
+        """Cancel a specific download."""
+        # Find worker by ID
+        worker_data = next((w for w in self.download_workers if w['id'] == download_id), None)
+        if not worker_data:
             return
         
-        # Create smooth animation
-        self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
-        self.progress_animation.setDuration(200)  # 200ms animation
-        self.progress_animation.setStartValue(current_value)
-        self.progress_animation.setEndValue(value)
-        self.progress_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.progress_animation.start()
-
-
-    def _download_finished(self, file_path: str):
-        """Handle successful download completion."""
-        self._log_message(f"🎉 Success! File saved to: {file_path}")
-        self._log_message("=" * 60)
-
-        # Re-enable download button and hide cancel
-        self.download_button.setEnabled(True)
-        self.download_button.setText("⬇ Download Audio")
-        self.cancel_button.setEnabled(False)
-        self.cancel_button.setVisible(False)
-
-        # Show success message
-        QMessageBox.information(
-            self,
-            "Download Complete",
-            f"Audio downloaded successfully!\n\nSaved to:\n{file_path}",
-        )
-
-    def _download_error(self, error_message: str):
-        """Handle download error."""
-        self._log_message(f"❌ Error: {error_message}")
-        self._log_message("=" * 60)
-
-        # Re-enable download button and hide cancel
-        self.download_button.setEnabled(True)
-        self.download_button.setText("⬇ Download Audio")
-        self.cancel_button.setEnabled(False)
-        self.cancel_button.setVisible(False)
-        self.progress_bar.setVisible(False)
-
-        # Show error message
-        self._show_error(f"Download failed:\n{error_message}")
-
-    def _cancel_download(self):
-        """Cancel the current download."""
-        if self.download_worker and self.download_worker.isRunning():
-            self._log_message("🛑 Cancelling download...")
-            self.download_worker.stop()
-            self.download_worker.wait(3000)  # Wait up to 3 seconds
+        worker = worker_data['worker']
+        widget = worker_data['widget']
+        
+        if worker.isRunning():
+            self._log_message(f"🛑 Cancelling download #{download_id + 1}...")
+            worker.stop()
+            worker.wait(3000)  # Wait up to 3 seconds
             
-            if self.download_worker.isRunning():
-                self.download_worker.terminate()  # Force terminate if needed
-                self._log_message("⚠️ Download force terminated")
+            if worker.isRunning():
+                worker.terminate()  # Force terminate if needed
+                self._log_message(f"⚠️ Download #{download_id + 1} force terminated")
             
-            # Reset UI
-            self.download_button.setEnabled(True)
-            self.download_button.setText("⬇ Download Audio")
-            self.cancel_button.setEnabled(False)
-            self.cancel_button.setVisible(False)
-            self.progress_bar.setVisible(False)
-            self._log_message("❌ Download cancelled by user")
+            # Update widget status
+            status_label = widget.findChild(QLabel, f"status_{download_id}")
+            if status_label:
+                status_label.setText("❌ Cancelled")
+                status_label.setStyleSheet("color: #888;")
+            
+            # Hide cancel button
+            cancel_btn = widget.findChild(QPushButton, f"cancel_{download_id}")
+            if cancel_btn:
+                cancel_btn.setVisible(False)
+            
+            self._log_message(f"❌ Download #{download_id + 1} cancelled by user")
+            
+            # Remove from active workers list
+            self.download_workers = [w for w in self.download_workers if w['id'] != download_id]
+
 
     def _show_error(self, message: str):
         """Show error message box."""

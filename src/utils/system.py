@@ -6,15 +6,19 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Tuple
+from typing import Tuple, Optional
 
 # Setup logging for debugging ffmpeg search
 logger = logging.getLogger(__name__)
+
+# Cache for resource paths to avoid repeated filesystem checks
+_resource_cache = {}
 
 
 def get_resource_path(relative_path: str) -> Path:
     """
     Get absolute path to resource, works for dev and PyInstaller.
+    Results are cached for performance.
 
     Args:
         relative_path: Relative path to resource (e.g., 'assets/icons/icon.ico')
@@ -22,6 +26,10 @@ def get_resource_path(relative_path: str) -> Path:
     Returns:
         Absolute path to resource
     """
+    # Return cached result if available
+    if relative_path in _resource_cache:
+        return _resource_cache[relative_path]
+    
     if getattr(sys, "frozen", False):
         # Running as compiled executable
         base_path = Path(sys._MEIPASS)
@@ -29,7 +37,12 @@ def get_resource_path(relative_path: str) -> Path:
         # Running as script
         base_path = Path(__file__).parent.parent.parent
 
-    return base_path / relative_path
+    result = base_path / relative_path
+    
+    # Cache the result for next time
+    _resource_cache[relative_path] = result
+    
+    return result
 
 
 def get_bundled_ffmpeg_path() -> Path | None:

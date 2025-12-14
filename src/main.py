@@ -4,6 +4,7 @@ import logging
 import sys
 from pathlib import Path
 
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -72,7 +73,11 @@ def main():
     """Initialize and run the application."""
     setup_logging()
     
+    # Enable hardware acceleration for faster rendering
+    QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
+    
     app = QApplication(sys.argv)
+    
     app.setApplicationName("ToneGrab")
     app.setOrganizationName("ToneGrab")
     
@@ -83,6 +88,9 @@ def main():
 
     window = MainWindow()
     window.show()
+    
+    # Force Qt to process events to display window faster
+    app.processEvents()
 
     sys.exit(app.exec())
 

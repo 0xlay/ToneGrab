@@ -12,7 +12,7 @@ class DownloadWorker(QThread):
     """Worker thread for downloading audio without blocking the UI."""
 
     # Signals
-    progress = Signal(int)  # Progress percentage (0-100)
+    progress = Signal(int, str)  # Progress percentage (0-100), description
     status = Signal(str)  # Status message
     finished = Signal(str)  # Finished with file path
     error = Signal(str)  # Error message
@@ -229,7 +229,7 @@ class DownloadWorker(QThread):
         else:
             self.error.emit(f"Failed to download any tracks from playlist")
 
-    def _smooth_progress_update(self, new_progress: int):
+    def _smooth_progress_update(self, new_progress: int, description: str = "Downloading"):
         """Update progress with smoothing and rate limiting."""
         import time
         
@@ -256,7 +256,7 @@ class DownloadWorker(QThread):
         if new_progress >= self._last_progress:
             self._last_progress = new_progress
             self._last_progress_time = current_time
-            self.progress.emit(new_progress)
+            self.progress.emit(new_progress, description)
     
     def _playlist_item_callback(self, current: int, total: int, title: str):
         """Callback for playlist item progress."""
@@ -271,7 +271,7 @@ class DownloadWorker(QThread):
         self._last_progress = 0
         self._last_progress_time = 0
         self._last_status_time = 0
-        self.progress.emit(0)  # Reset progress for new item
+        self.progress.emit(0, "Starting...")  # Reset progress for new item
 
     def _progress_hook(self, d: dict):
         """
@@ -313,7 +313,13 @@ class DownloadWorker(QThread):
             
             # Emit progress with smoothing
             if percent > 0:
-                self._smooth_progress_update(int(percent))
+                # Create short description from speed
+                desc = "Downloading"
+                speed_bytes = d.get("speed", 0)
+                if speed_bytes:
+                    speed_mb = speed_bytes / 1024 / 1024
+                    desc = f"{speed_mb:.1f} MB/s"
+                self._smooth_progress_update(int(percent), desc)
 
             # Build status message with download info
             downloaded = d.get("downloaded_bytes", 0)
@@ -365,7 +371,7 @@ class DownloadWorker(QThread):
 
         elif d["status"] == "finished":
             self.status.emit("🔄 Processing audio...")
-            self.progress.emit(100)
+            self.progress.emit(100, "Complete")
 
     @staticmethod
     def _strip_ansi(text: str) -> str:
