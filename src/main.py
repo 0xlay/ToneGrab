@@ -21,27 +21,51 @@ def setup_logging():
     else:
         log_dir = Path.home() / ".local" / "share" / "ToneGrab" / "logs"
     
-    log_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        log_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        # If can't create in standard location, try home directory
+        log_dir = Path.home()
+        print(f"Warning: Could not create log directory, using {log_dir}: {e}")
+    
     log_file = log_dir / "tonegrab.log"
     
-    # Configure logging
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_file, mode='a', encoding='utf-8'),
-            logging.StreamHandler(sys.stdout)
-        ]
-    )
+    # Remove any existing handlers
+    for handler in logging.root.handlers[:]:
+        logging.root.removeHandler(handler)
     
+    # Create file handler with immediate flush
+    file_handler = logging.FileHandler(log_file, mode='a', encoding='utf-8')
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    
+    # Configure root logger
+    logging.root.setLevel(logging.DEBUG)
+    logging.root.addHandler(file_handler)
+    
+    # Only add stream handler if not frozen (avoid issues with GUI apps)
+    if not getattr(sys, 'frozen', False):
+        stream_handler = logging.StreamHandler(sys.stdout)
+        stream_handler.setLevel(logging.DEBUG)
+        stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+        logging.root.addHandler(stream_handler)
+    
+    # Force immediate write
     logging.info("=" * 60)
     logging.info("ToneGrab started")
     logging.info(f"Log file: {log_file}")
     logging.info(f"Platform: {sys.platform}")
+    logging.info(f"Python version: {sys.version}")
     logging.info(f"Frozen: {getattr(sys, 'frozen', False)}")
     if getattr(sys, 'frozen', False):
         logging.info(f"sys._MEIPASS: {sys._MEIPASS}")
+        logging.info(f"sys.executable: {sys.executable}")
     logging.info("=" * 60)
+    
+    # Flush immediately
+    for handler in logging.root.handlers:
+        handler.flush()
+
 
 
 def main():

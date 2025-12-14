@@ -129,7 +129,28 @@ def check_ffmpeg() -> Tuple[bool, str]:
         ffmpeg_path = find_ffmpeg()
         
         if not ffmpeg_path:
+            logger.error("check_ffmpeg: ffmpeg_path is None")
             return False, "FFmpeg not found in PATH or bundled location"
+        
+        logger.info(f"check_ffmpeg: Attempting to run: {ffmpeg_path} -version")
+        
+        # Check if file exists and is executable
+        from pathlib import Path
+        ffmpeg_file = Path(ffmpeg_path)
+        if not ffmpeg_file.exists():
+            logger.error(f"check_ffmpeg: File does not exist: {ffmpeg_path}")
+            return False, f"FFmpeg file not found: {ffmpeg_path}"
+        
+        if not os.access(ffmpeg_path, os.X_OK):
+            logger.error(f"check_ffmpeg: File not executable: {ffmpeg_path}")
+            # Try to make it executable on Unix systems
+            if sys.platform in ["darwin", "linux"]:
+                try:
+                    os.chmod(ffmpeg_path, 0o755)
+                    logger.info(f"check_ffmpeg: Set executable permissions on {ffmpeg_path}")
+                except Exception as chmod_error:
+                    logger.error(f"check_ffmpeg: Failed to chmod: {chmod_error}")
+                    return False, f"FFmpeg found but not executable: {ffmpeg_path}"
 
         # Get version
         result = subprocess.run(
@@ -138,17 +159,27 @@ def check_ffmpeg() -> Tuple[bool, str]:
             text=True,
             timeout=5,
         )
+        
+        logger.info(f"check_ffmpeg: returncode={result.returncode}")
+        if result.returncode != 0:
+            logger.error(f"check_ffmpeg: stderr={result.stderr}")
+            logger.error(f"check_ffmpeg: stdout={result.stdout}")
 
         if result.returncode == 0:
             # Extract version from first line
             version_line = result.stdout.split("\n")[0]
+            logger.info(f"check_ffmpeg: Success - {version_line}")
             return True, version_line
         else:
-            return False, "FFmpeg found but unable to get version"
+            return False, f"FFmpeg found but unable to get version (code {result.returncode})"
 
     except subprocess.TimeoutExpired:
+        logger.error("check_ffmpeg: Timeout expired")
         return False, "FFmpeg check timed out"
     except Exception as e:
+        logger.error(f"check_ffmpeg: Exception - {type(e).__name__}: {str(e)}")
+        import traceback
+        logger.error(f"check_ffmpeg: Traceback:\n{traceback.format_exc()}")
         return False, f"Error checking FFmpeg: {str(e)}"
 
 

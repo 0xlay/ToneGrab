@@ -1,5 +1,6 @@
 """Main window for ToneGrab application."""
 
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve
@@ -54,13 +55,29 @@ class MainWindow(QMainWindow):
 
     def _check_dependencies(self):
         """Check system dependencies and warn if missing."""
+        import logging
+        from pathlib import Path
+        
         ffmpeg_available, ffmpeg_info = check_ffmpeg()
         
         if not ffmpeg_available:
+            # Get log file location for debugging
+            if sys.platform == "darwin":
+                log_file = Path.home() / "Library" / "Logs" / "ToneGrab" / "tonegrab.log"
+            elif sys.platform == "win32":
+                log_file = Path.home() / "AppData" / "Local" / "ToneGrab" / "Logs" / "tonegrab.log"
+            else:
+                log_file = Path.home() / ".local" / "share" / "ToneGrab" / "logs" / "tonegrab.log"
+            
+            if not log_file.exists():
+                log_file = Path.home() / "tonegrab.log"
+            
             msg = (
                 "⚠️ FFmpeg not detected!\n\n"
                 "FFmpeg is required to convert audio files.\n"
+                f"Error: {ffmpeg_info}\n\n"
                 "The app will work for downloading, but conversion may fail.\n\n"
+                f"For debugging, check log file:\n{log_file}\n\n"
                 "Installation instructions:\n"
                 "• Windows: Download from https://ffmpeg.org/download.html\n"
                 "• macOS: Run 'brew install ffmpeg' in Terminal\n"
@@ -79,7 +96,7 @@ class MainWindow(QMainWindow):
             if reply == QMessageBox.StandardButton.No:
                 self.close()
             else:
-                self._log_message("⚠️ Warning: FFmpeg not found. Audio conversion may fail.")
+                self._log_message(f"⚠️ Warning: FFmpeg not found - {ffmpeg_info}")
         else:
             self._log_message(f"✅ FFmpeg detected: {ffmpeg_info}")
 
