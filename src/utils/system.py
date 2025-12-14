@@ -141,6 +141,28 @@ def check_ffmpeg() -> Tuple[bool, str]:
             logger.error(f"check_ffmpeg: File does not exist: {ffmpeg_path}")
             return False, f"FFmpeg file not found: {ffmpeg_path}"
         
+        # Log file stats
+        try:
+            stat_info = os.stat(ffmpeg_path)
+            logger.info(f"check_ffmpeg: File size: {stat_info.st_size} bytes")
+            logger.info(f"check_ffmpeg: File mode: {oct(stat_info.st_mode)}")
+            logger.info(f"check_ffmpeg: Is executable: {os.access(ffmpeg_path, os.X_OK)}")
+        except Exception as stat_error:
+            logger.warning(f"check_ffmpeg: Could not stat file: {stat_error}")
+        
+        # Check file type on macOS to verify it's the right architecture
+        if sys.platform == "darwin":
+            try:
+                file_result = subprocess.run(
+                    ["file", ffmpeg_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=2,
+                )
+                logger.info(f"check_ffmpeg: File type: {file_result.stdout.strip()}")
+            except Exception as file_error:
+                logger.warning(f"check_ffmpeg: Could not check file type: {file_error}")
+        
         if not os.access(ffmpeg_path, os.X_OK):
             logger.error(f"check_ffmpeg: File not executable: {ffmpeg_path}")
             # Try to make it executable on Unix systems
@@ -148,6 +170,8 @@ def check_ffmpeg() -> Tuple[bool, str]:
                 try:
                     os.chmod(ffmpeg_path, 0o755)
                     logger.info(f"check_ffmpeg: Set executable permissions on {ffmpeg_path}")
+                    # Verify chmod worked
+                    logger.info(f"check_ffmpeg: After chmod, is executable: {os.access(ffmpeg_path, os.X_OK)}")
                 except Exception as chmod_error:
                     logger.error(f"check_ffmpeg: Failed to chmod: {chmod_error}")
                     return False, f"FFmpeg found but not executable: {ffmpeg_path}"
