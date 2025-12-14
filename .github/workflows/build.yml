@@ -312,6 +312,9 @@ jobs:
         curl -L "https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip" -o ffmpeg.zip
         curl -L "https://evermeet.cx/ffmpeg/ffprobe-7.1.zip" -o ffprobe.zip
         
+        # Remove any existing files first
+        rm -f ffmpeg ffprobe
+        
         # Extract
         unzip -o ffmpeg.zip
         unzip -o ffprobe.zip
