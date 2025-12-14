@@ -305,34 +305,40 @@ jobs:
         echo "System architecture: $(uname -m)"
         
         # Download STATIC FFmpeg build for macOS ARM64
-        # Using builds from https://www.gyan.dev/ffmpeg/builds/ or similar
-        # Alternative: Compile static build ourselves
+        # Using official builds from https://evermeet.cx/ffmpeg/
+        # These are static builds specifically for macOS
         
-        # Method 1: Try ffmpeg-static npm package (has static binaries)
-        brew install node
-        npm install -g ffmpeg-static ffprobe-static
+        # Download FFmpeg static build
+        curl -L "https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip" -o ffmpeg.zip
+        curl -L "https://evermeet.cx/ffmpeg/ffprobe-7.1.zip" -o ffprobe.zip
         
-        # Find the installed static binaries
-        FFMPEG_STATIC=$(npm root -g)/ffmpeg-static/ffmpeg
-        FFPROBE_STATIC=$(npm root -g)/ffprobe-static/ffprobe
+        # Extract
+        unzip -o ffmpeg.zip
+        unzip -o ffprobe.zip
         
-        # Copy to bundle
-        cp "$FFMPEG_STATIC" ffmpeg/macos/bin/ffmpeg
-        cp "$FFPROBE_STATIC" ffmpeg/macos/bin/ffprobe
+        # Move to bundle directory
+        mv ffmpeg ffmpeg/macos/bin/
+        mv ffprobe ffmpeg/macos/bin/
         
         # Make executable
         chmod +x ffmpeg/macos/bin/*
         
-        # Verify architecture and check if static
+        # Verify architecture
         file ffmpeg/macos/bin/ffmpeg
         file ffmpeg/macos/bin/ffprobe
+        
+        # Check if static or dynamic (should show minimal dependencies)
+        echo "FFmpeg dependencies:"
         otool -L ffmpeg/macos/bin/ffmpeg
+        echo "FFprobe dependencies:"
+        otool -L ffmpeg/macos/bin/ffprobe
         
         # Test execution
+        echo "Testing FFmpeg:"
         ffmpeg/macos/bin/ffmpeg -version | head -n 1
         
         # Create LICENSE file
-        echo "FFmpeg static binaries" > ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg static binaries from https://evermeet.cx/ffmpeg/" > ffmpeg/macos/LICENSE.txt
         echo "FFmpeg is licensed under LGPL 2.1+" >> ffmpeg/macos/LICENSE.txt
         echo "https://ffmpeg.org/legal.html" >> ffmpeg/macos/LICENSE.txt
         
