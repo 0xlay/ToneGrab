@@ -35,14 +35,6 @@ def get_bundled_ffmpeg_path() -> Path | None:
     Returns:
         Path to ffmpeg if found, None otherwise
     """
-    # Determine the base path (works for both dev and bundled)
-    if getattr(sys, "frozen", False):
-        # Running as compiled executable
-        base_path = Path(sys._MEIPASS)
-    else:
-        # Running as script
-        base_path = Path(__file__).parent.parent.parent
-
     # Determine platform
     if sys.platform == "win32":
         ffmpeg_name = "ffmpeg.exe"
@@ -53,6 +45,34 @@ def get_bundled_ffmpeg_path() -> Path | None:
     else:
         ffmpeg_name = "ffmpeg"
         platform = "linux"
+
+    # Determine the base path (works for both dev and bundled)
+    if getattr(sys, "frozen", False):
+        # Running as compiled executable
+        base_path = Path(sys._MEIPASS)
+        
+        # For macOS .app bundle, check multiple possible locations
+        if sys.platform == "darwin":
+            possible_paths = [
+                base_path / "ffmpeg" / platform / "bin" / ffmpeg_name,
+                base_path / ffmpeg_name,  # If placed at root of bundle
+                base_path / ".." / "Resources" / "ffmpeg" / platform / "bin" / ffmpeg_name,
+            ]
+            
+            for path in possible_paths:
+                if path.exists():
+                    return path
+            
+            # Debug: print searched paths
+            print(f"DEBUG: Searched for ffmpeg in:")
+            print(f"  sys._MEIPASS: {base_path}")
+            for path in possible_paths:
+                print(f"  - {path} (exists: {path.exists()})")
+            
+            return None
+    else:
+        # Running as script
+        base_path = Path(__file__).parent.parent.parent
 
     # Check bundled location
     bundled_path = base_path / "ffmpeg" / platform / "bin" / ffmpeg_name

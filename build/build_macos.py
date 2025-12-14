@@ -30,7 +30,7 @@ def build_macos():
     args = [
         MAIN_SCRIPT,
         f"--name={APP_NAME}",
-        "--onefile",  # Single executable file
+        # --onefile not compatible with --target-arch=universal2
         "--windowed",  # .app bundle
         f"--distpath={DIST_DIR}",
         f"--workpath={BUILD_DIR / 'temp'}",
