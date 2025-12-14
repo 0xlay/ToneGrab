@@ -305,25 +305,36 @@ jobs:
         echo "System architecture: $(uname -m)"
         
         # Download STATIC FFmpeg build for macOS ARM64
-        # Using official builds from https://evermeet.cx/ffmpeg/
-        # These are static builds specifically for macOS
+        # evermeet.cx returns x86_64 by default, so we need to get ARM64 specifically
         
         # Create temporary directory for extraction
         mkdir -p ffmpeg-temp
         cd ffmpeg-temp
         
-        # Download FFmpeg static build
-        curl -L "https://evermeet.cx/ffmpeg/ffmpeg-7.1.zip" -o ffmpeg.zip
-        curl -L "https://evermeet.cx/ffmpeg/ffprobe-7.1.zip" -o ffprobe.zip
+        # Method: Use the latest release and get the correct architecture
+        # evermeet.cx/ffmpeg/getrelease/ffmpeg/zip returns x86_64
+        # We need to use a different source for ARM64
+        
+        # Option 1: Download from direct ARM64 link if available
+        # Option 2: Use rg-adguard builds which have proper ARM64 support
+        # Option 3: Download from official FFmpeg or build ourselves
+        
+        # Using https://github.com/AnimMouse/ffmpeg-stable-autobuild which has ARM64 builds
+        FFMPEG_VERSION="7.1.0"
+        
+        # Download ARM64 builds
+        curl -L "https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases/download/${FFMPEG_VERSION}/ffmpeg-${FFMPEG_VERSION}-macos-arm64-gpl.tar.xz" -o ffmpeg-arm64.tar.xz
         
         # Extract
-        unzip -o ffmpeg.zip
-        unzip -o ffprobe.zip
+        tar -xf ffmpeg-arm64.tar.xz
+        
+        # Find the bin directory and copy binaries
+        FFMPEG_DIR=$(find . -type d -name "bin" | head -n 1)
         
         # Move to bundle directory (go back to root first)
         cd ..
-        mv ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
-        mv ffmpeg-temp/ffprobe ffmpeg/macos/bin/
+        cp ffmpeg-temp/${FFMPEG_DIR}/ffmpeg ffmpeg/macos/bin/
+        cp ffmpeg-temp/${FFMPEG_DIR}/ffprobe ffmpeg/macos/bin/
         
         # Clean up temp directory
         rm -rf ffmpeg-temp
@@ -331,23 +342,22 @@ jobs:
         # Make executable
         chmod +x ffmpeg/macos/bin/*
         
-        # Verify architecture
+        # Verify architecture (MUST be arm64)
+        echo "Verifying architecture (should be arm64):"
         file ffmpeg/macos/bin/ffmpeg
         file ffmpeg/macos/bin/ffprobe
         
-        # Check if static or dynamic (should show minimal dependencies)
+        # Check dependencies
         echo "FFmpeg dependencies:"
-        otool -L ffmpeg/macos/bin/ffmpeg
-        echo "FFprobe dependencies:"
-        otool -L ffmpeg/macos/bin/ffprobe
+        otool -L ffmpeg/macos/bin/ffmpeg | head -n 10
         
         # Test execution
         echo "Testing FFmpeg:"
         ffmpeg/macos/bin/ffmpeg -version | head -n 1
         
         # Create LICENSE file
-        echo "FFmpeg static binaries from https://evermeet.cx/ffmpeg/" > ffmpeg/macos/LICENSE.txt
-        echo "FFmpeg is licensed under LGPL 2.1+" >> ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg static binaries from https://github.com/AnimMouse/ffmpeg-stable-autobuild" > ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg is licensed under GPL 3.0" >> ffmpeg/macos/LICENSE.txt
         echo "https://ffmpeg.org/legal.html" >> ffmpeg/macos/LICENSE.txt
         ffmpeg/macos/bin/ffmpeg -version | head -n 1
         

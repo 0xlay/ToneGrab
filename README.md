@@ -135,10 +135,11 @@ Before building, you need to download FFmpeg binaries and place them in the corr
 
 1. **Download FFmpeg** for your platform:
    - **Windows**: https://github.com/BtbN/FFmpeg-Builds/releases (download `ffmpeg-master-latest-win64-gpl.zip`)
-   - **macOS**: https://evermeet.cx/ffmpeg/ (download specific version, e.g., `ffmpeg-7.1.zip` and `ffprobe-7.1.zip`)
+   - **macOS ARM64 (M1/M2/M3/M4)**: https://github.com/AnimMouse/ffmpeg-stable-autobuild/releases (download `ffmpeg-*-macos-arm64-gpl.tar.xz`)
+   - **macOS Intel (x86_64)**: https://evermeet.cx/ffmpeg/
    - **Linux**: https://johnvansickle.com/ffmpeg/
 
-   > **Note for macOS**: The evermeet.cx builds are universal binaries (work on both Intel and Apple Silicon)
+   > **Note**: Make sure to download the correct architecture for your Mac
 
 2. **Extract and organize** FFmpeg binaries into the following structure:
    ```

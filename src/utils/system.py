@@ -91,7 +91,8 @@ def get_bundled_ffmpeg_path() -> Path | None:
 
 def find_ffmpeg() -> str | None:
     """
-    Find ffmpeg executable. Checks bundled location first, then system PATH.
+    Find ffmpeg executable. Checks bundled location first, then system PATH,
+    then common Homebrew locations on macOS.
 
     Returns:
         Path to ffmpeg or None if not found
@@ -113,7 +114,36 @@ def find_ffmpeg() -> str | None:
         logger.info(f"Found system ffmpeg at: {system_ffmpeg}")
         return system_ffmpeg
     
-    logger.error("ffmpeg not found in bundled location or system PATH")
+    # On macOS, check common Homebrew installation paths
+    if sys.platform == "darwin":
+        homebrew_paths = [
+            "/opt/homebrew/bin/ffmpeg",  # Apple Silicon (ARM64)
+            "/usr/local/bin/ffmpeg",     # Intel (x86_64)
+            "/opt/homebrew/Cellar/ffmpeg",  # Cellar directory
+        ]
+        
+        for path in homebrew_paths:
+            if path.endswith("Cellar/ffmpeg"):
+                # Check Cellar directory for any version
+                from pathlib import Path
+                cellar = Path(path)
+                if cellar.exists():
+                    # Find the latest version
+                    versions = sorted(cellar.iterdir(), reverse=True)
+                    if versions:
+                        ffmpeg_bin = versions[0] / "bin" / "ffmpeg"
+                        if ffmpeg_bin.exists():
+                            logger.info(f"Found Homebrew ffmpeg in Cellar at: {ffmpeg_bin}")
+                            return str(ffmpeg_bin)
+            else:
+                # Direct path check
+                if os.path.exists(path) and os.access(path, os.X_OK):
+                    logger.info(f"Found Homebrew ffmpeg at: {path}")
+                    return path
+        
+        logger.warning("FFmpeg not found in Homebrew locations (/opt/homebrew or /usr/local)")
+    
+    logger.error("ffmpeg not found in bundled location, system PATH, or Homebrew")
     return None
 
 
