@@ -301,23 +301,26 @@ jobs:
         # Create ffmpeg directory structure
         mkdir -p ffmpeg/macos/bin
         
-        # Download FFmpeg for Apple Silicon
-        wget https://evermeet.cx/ffmpeg/getrelease/ffmpeg/zip -O ffmpeg.zip
-        wget https://evermeet.cx/ffmpeg/getrelease/ffprobe/zip -O ffprobe.zip
+        # Check architecture
+        echo "System architecture: $(uname -m)"
         
-        # Extract FFmpeg
-        unzip -o ffmpeg.zip -d ffmpeg-temp
-        unzip -o ffprobe.zip -d ffmpeg-temp
+        # Download FFmpeg for Apple Silicon (ARM64)
+        # Using static builds from github.com/eugeneware/ffmpeg-static
+        FFMPEG_VERSION="b6.0"
         
-        # Copy binaries
-        cp ffmpeg-temp/ffmpeg ffmpeg/macos/bin/
-        cp ffmpeg-temp/ffprobe ffmpeg/macos/bin/
+        # Download ARM64 binaries
+        wget https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_VERSION}/darwin-arm64 -O ffmpeg/macos/bin/ffmpeg
+        wget https://github.com/eugeneware/ffmpeg-static/releases/download/${FFMPEG_VERSION}/ffprobe-darwin-arm64 -O ffmpeg/macos/bin/ffprobe
         
         # Make executable
         chmod +x ffmpeg/macos/bin/*
         
+        # Verify architecture
+        file ffmpeg/macos/bin/ffmpeg
+        file ffmpeg/macos/bin/ffprobe
+        
         # Create LICENSE file
-        echo "FFmpeg binaries from https://evermeet.cx/ffmpeg/" > ffmpeg/macos/LICENSE.txt
+        echo "FFmpeg binaries from https://github.com/eugeneware/ffmpeg-static" > ffmpeg/macos/LICENSE.txt
         
         # Cleanup
         rm -rf ffmpeg-temp ffmpeg.zip ffprobe.zip

@@ -135,7 +135,8 @@ Before building, you need to download FFmpeg binaries and place them in the corr
 
 1. **Download FFmpeg** for your platform:
    - **Windows**: https://github.com/BtbN/FFmpeg-Builds/releases (download `ffmpeg-master-latest-win64-gpl.zip`)
-   - **macOS**: https://evermeet.cx/ffmpeg/ or https://github.com/eugeneware/ffmpeg-static/releases
+   - **macOS (Apple Silicon ARM64)**: https://github.com/eugeneware/ffmpeg-static/releases (download `darwin-arm64` and `ffprobe-darwin-arm64`)
+   - **macOS (Intel x86_64)**: https://evermeet.cx/ffmpeg/
    - **Linux**: https://johnvansickle.com/ffmpeg/ or https://github.com/eugeneware/ffmpeg-static/releases
 
 2. **Extract and organize** FFmpeg binaries into the following structure:
