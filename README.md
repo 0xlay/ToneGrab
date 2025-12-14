@@ -135,9 +135,10 @@ Before building, you need to download FFmpeg binaries and place them in the corr
 
 1. **Download FFmpeg** for your platform:
    - **Windows**: https://github.com/BtbN/FFmpeg-Builds/releases (download `ffmpeg-master-latest-win64-gpl.zip`)
-   - **macOS (Apple Silicon ARM64)**: https://github.com/eugeneware/ffmpeg-static/releases (download `darwin-arm64` and `ffprobe-darwin-arm64`)
-   - **macOS (Intel x86_64)**: https://evermeet.cx/ffmpeg/
-   - **Linux**: https://johnvansickle.com/ffmpeg/ or https://github.com/eugeneware/ffmpeg-static/releases
+   - **macOS**: Install via Homebrew (`brew install ffmpeg`) or download from https://evermeet.cx/ffmpeg/
+   - **Linux**: https://johnvansickle.com/ffmpeg/
+
+   > **Note for macOS**: Homebrew automatically installs the correct architecture (ARM64 for Apple Silicon, x86_64 for Intel)
 
 2. **Extract and organize** FFmpeg binaries into the following structure:
    ```
